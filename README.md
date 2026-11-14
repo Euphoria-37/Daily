@@ -1,8 +1,17 @@
 # Daily
 
-一个简洁的 Windows 桌面待办便笺。圆角窗口、暖白底色，支持图钉置顶。
+一个简洁的桌面待办工具，提供 Windows 与原生 macOS 版本。两个平台独立实现、数据仅保存在本机，目前不提供跨设备同步。
 
-## 使用
+| 平台 | 系统要求 | 下载与说明 |
+| --- | --- | --- |
+| Windows | Windows 10 / 11，.NET Framework 4.8 | [下载 Daily.exe](https://github.com/march7th-26/Daily/releases/latest)，使用方式见下文 |
+| macOS | macOS 13+，Intel / Apple Silicon | [下载 macOS 版](https://github.com/march7th-26/Daily/releases/tag/macos-v1.6.1) · [macOS 使用与构建说明](macos/README.md) |
+
+macOS 版支持菜单栏面板、通知中心小组件、日间白绿/夜间深灰配紫色界面，以及可自由调整大小的窗口。首次安装需注意 [macOS 签名说明](macos/README.md#下载与安装)。
+
+Windows 源码保留在仓库根目录，macOS 源码位于 [`macos/`](macos/)。
+
+## Windows 使用
 
 从 [Releases](https://github.com/march7th-26/Daily/releases/latest) 下载 `Daily.exe`。
 
@@ -24,7 +33,7 @@
 
 置顶使用 Windows 标准窗口机制，可以悬浮在普通应用窗口之上；系统安全桌面、独占全屏以及其他置顶窗口不保证被覆盖。
 
-## 从源码构建
+## Windows 从源码构建
 
 使用 Windows PowerShell 和系统自带 .NET Framework C# 编译器，不需要 Node.js 或额外软件包。
 

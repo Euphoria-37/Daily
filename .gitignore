@@ -1,2 +1,10 @@
 bin/
 *.exe
+
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+macos/.build/
+macos/dist/
+DerivedData/
