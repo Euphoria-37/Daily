@@ -74,7 +74,7 @@
       <StackPanel Grid.Row="1" Margin="0,18,0,20">
         <TextBlock x:Name="DateLabel" FontSize="12" Foreground="#67756C" Margin="0,0,0,7"/>
         <TextBlock Text="Daily" FontSize="28" FontWeight="SemiBold"/>
-        <TextBlock Text="把今天，过得有条不紊。" Foreground="#657269" FontSize="12" Margin="1,8,0,0"/>
+        <TextBlock x:Name="QuoteLabel" Text="把今天，过得有条不紊。" TextWrapping="Wrap" Foreground="#657269" FontSize="12" Margin="1,8,0,0"/>
       </StackPanel>
       <Border Grid.Row="2" Background="#F0F2EC" CornerRadius="12" BorderBrush="#E2E6DD" BorderThickness="1" Padding="12,6,6,6" Margin="0,0,0,18">
         <Grid>

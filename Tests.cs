@@ -43,10 +43,32 @@ namespace DailyTodo
                 store.Save();
                 Check(File.Exists(store.FilePath + ".bak"), "previous save backed up");
 
+                int quoteRequests = 0;
+                Func<System.Threading.Tasks.Task<string>> quoteFetch = () => {
+                    quoteRequests++;
+                    return System.Threading.Tasks.Task.FromResult("每天向前一步。");
+                };
+                var day = new DateTime(2026, 11, 14, 23, 59, 0);
+                Check(DailyQuote.RefreshAsync(store.Data, day, quoteFetch).GetAwaiter().GetResult(), "first daily quote fetched");
+                Check(!DailyQuote.RefreshAsync(store.Data, day.AddSeconds(30), quoteFetch).GetAwaiter().GetResult() && quoteRequests == 1, "same system date uses cache");
+                Check(DailyQuote.RefreshAsync(store.Data, day.AddMinutes(2), quoteFetch).GetAwaiter().GetResult() && quoteRequests == 2, "midnight fetches a new quote");
+                store.Save();
+                var quoteRestored = new TodoStore(store.FilePath);
+                Check(DailyQuote.IsCurrent(quoteRestored.Data, day.AddMinutes(2)) && quoteRestored.Data.QuoteText == "每天向前一步。", "daily quote survives restart");
+                bool invalidQuote = false;
+                try { DailyQuote.RefreshAsync(store.Data, day.AddDays(2), () => System.Threading.Tasks.Task.FromResult("<html>bad gateway</html>")).GetAwaiter().GetResult(); }
+                catch (FormatException) { invalidQuote = true; }
+                Check(invalidQuote && store.Data.QuoteText == "每天向前一步。" && store.Data.QuoteDate == "2026-11-15", "invalid response preserves cached quote");
+                bool offline = false;
+                try { DailyQuote.RefreshAsync(store.Data, day.AddDays(2), () => { throw new System.Net.Http.HttpRequestException(); }).GetAwaiter().GetResult(); }
+                catch (System.Net.Http.HttpRequestException) { offline = true; }
+                Check(offline && store.Data.QuoteDate == "2026-11-15", "network failure does not mark date refreshed");
+
                 var app = new Application();
-                var window = new MainWindow(store);
+                var window = new MainWindow(store, false);
                 window.Show();
                 window.UpdateLayout();
+                Check(((TextBlock)window.FindName("QuoteLabel")).Text == "每天向前一步。", "main interface displays cached daily quote");
                 Check(!window.ShowInTaskbar, "window excluded from taskbar");
                 Check(((Grid)window.Content).Children.Count == 9, "all eight resize edges and corners installed");
                 Check(app.Windows.Count == 1, "only the visible task window remains registered");

@@ -22,6 +22,8 @@ namespace DailyTodo
         public double Top { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
+        public string QuoteText { get; set; }
+        public string QuoteDate { get; set; }
         public TodoData()
         {
             Items = new List<TodoItem>();

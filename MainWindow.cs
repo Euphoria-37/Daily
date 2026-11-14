@@ -61,7 +61,7 @@ namespace DailyTodo
 
         T Part<T>(string name) where T : FrameworkElement { return (T)FindName(name); }
 
-        public MainWindow(TodoStore store)
+        public MainWindow(TodoStore store, bool onlineQuotes = true)
         {
             this.store = store;
             Window view;
@@ -121,7 +121,7 @@ namespace DailyTodo
             Closing += OnClosing;
             Loaded += delegate { input.Focus(); };
             dateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-            dateTimer.Tick += delegate { UpdateDate(); };
+            dateTimer.Tick += async delegate { UpdateDate(); await RefreshQuoteAsync(); };
             dateTimer.Start();
             Closed += delegate { dateTimer.Stop(); };
             tray = new System.Windows.Forms.NotifyIcon { Text = "Daily", Icon = System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location), Visible = true };
@@ -136,6 +136,7 @@ namespace DailyTodo
             Closed += delegate { tray.Visible = false; tray.Icon.Dispose(); tray.Dispose(); menu.Dispose(); };
             UpdateDate();
             RenderTasks();
+            InitializeQuote(onlineQuotes);
             // XamlReader creates a temporary Window registered with Application.
             // Release it after transferring its content so closing this window exits.
             view.Close();
