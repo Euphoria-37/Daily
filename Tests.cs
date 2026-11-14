@@ -19,6 +19,15 @@ namespace DailyTodo
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
         static extern int GetWindowLong(IntPtr handle, int index);
 
+        static void Pump(int milliseconds)
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+            timer.Tick += delegate { timer.Stop(); frame.Continue = false; };
+            timer.Start();
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+
         [STAThread]
         public static int Main()
         {
@@ -120,6 +129,62 @@ namespace DailyTodo
                 Check(window.Top == 0 && window.Height == 18 && window.Width == 100, "top dock collapses to horizontal strip");
                 window.ExpandDock();
                 Check(window.Top == -12 && window.Width == 340 && window.Height == 400, "top expansion restores full window");
+                foreach (int side in new[] { -1, 1, 2 })
+                {
+                    window.DockTo(side, new Rect(0, 0, 1920, 1080));
+                    window.CollapseDock();
+                    var hover = new Point(window.Left + window.Width / 2, window.Top + window.Height / 2);
+                    if (side == -1) hover.X = 0;
+                    if (side == 1) hover.X = 1919;
+                    if (side == 2) hover.Y = 0;
+                    var tick = DateTime.UtcNow;
+                    window.UpdateDockHover(hover, false, tick);
+                    Check(!window.DockCollapsed, "edge hover expands dock " + side);
+                    for (int n = 1; n <= 20; n++) window.UpdateDockHover(hover, false, tick.AddMilliseconds(n * 100));
+                    Check(!window.DockCollapsed, "stationary pointer at strip stays expanded " + side);
+                    var outside = new Point(960, 1000);
+                    window.UpdateDockHover(outside, false, tick.AddSeconds(3));
+                    window.UpdateDockHover(outside, false, tick.AddSeconds(3.1));
+                    Check(!window.DockCollapsed, "leave delay prevents premature collapse " + side);
+                    window.UpdateDockHover(outside, false, tick.AddSeconds(3.25));
+                    Check(window.DockCollapsed, "pointer outside collapses after delay " + side);
+                    window.UpdateDockHover(hover, false, tick.AddSeconds(4));
+                    Check(!window.DockCollapsed, "returning pointer expands again " + side);
+                    window.UpdateDockHover(outside, true, tick.AddSeconds(5));
+                    window.UpdateDockHover(outside, true, tick.AddSeconds(6));
+                    Check(!window.DockCollapsed, "mouse drag does not collapse panel " + side);
+                }
+                var originalCursor = System.Windows.Forms.Cursor.Position;
+                try
+                {
+                    var screen = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(window).Handle).WorkingArea;
+                    var origin = window.PointFromScreen(new Point(screen.Left, screen.Top));
+                    var end = window.PointFromScreen(new Point(screen.Right, screen.Bottom));
+                    var area = new Rect(origin.X + window.Left, origin.Y + window.Top, end.X - origin.X, end.Y - origin.Y);
+                    foreach (int side in new[] { -1, 1, 2 })
+                    {
+                        System.Windows.Forms.Cursor.Position = new System.Drawing.Point(screen.Left + screen.Width / 2, screen.Bottom - 30);
+                        window.DockTo(side, area);
+                        window.CollapseDock();
+                        window.UpdateLayout();
+                        var target = window.PointToScreen(new Point(side == -1 ? 1 : side == 1 ? window.Width - 1 : window.Width / 2,
+                            side == 2 ? 1 : window.Height / 2));
+                        System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)target.X, (int)target.Y);
+                        Pump(150);
+                        Check(!window.DockCollapsed, "real cursor and timer expand edge " + side);
+                        bool collapsedWhileHovering = false;
+                        SizeChangedEventHandler observe = delegate { if (window.DockCollapsed) collapsedWhileHovering = true; };
+                        window.SizeChanged += observe;
+                        Pump(850);
+                        window.SizeChanged -= observe;
+                        Check(!window.DockCollapsed && !collapsedWhileHovering, "real stationary hover has no collapse transitions " + side);
+                        System.Windows.Forms.Cursor.Position = new System.Drawing.Point(screen.Left + screen.Width / 2, screen.Bottom - 30);
+                        Pump(400);
+                        Check(window.DockCollapsed, "real cursor leave collapses edge " + side);
+                        window.ExpandDock();
+                    }
+                }
+                finally { System.Windows.Forms.Cursor.Position = originalCursor; }
                 window.Close();
                 Check(app.Windows.Count == 0, "closing task window leaves no hidden windows");
                 var restored = new TodoStore(store.FilePath);
