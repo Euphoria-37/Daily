@@ -4,6 +4,8 @@
 
 ## 使用
 
+从 [Releases](https://github.com/march7th-26/Daily/releases/latest) 下载 `Daily.exe`。
+
 双击 `Daily.exe`，无需安装，也无需管理员权限。适用于已启用 .NET Framework 4.8 的 Windows 10 / 11。
 
 - 输入事项，按 **Enter** 或点击 **+** 添加。
