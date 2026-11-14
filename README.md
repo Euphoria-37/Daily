@@ -11,6 +11,53 @@ macOS 版支持菜单栏面板、通知中心小组件、日间白绿/夜间深�
 
 Windows 源码保留在仓库根目录，macOS 源码位于 [`macos/`](macos/)。
 
+## macOS 使用
+
+适用于 **macOS 13 及以上**，支持 **Intel 与 Apple Silicon**。
+
+### 下载与安装
+
+从 [macOS v1.6.1 发布页](https://github.com/march7th-26/Daily/releases/tag/macos-v1.6.1) 下载：
+
+- [PKG 安装包](https://github.com/march7th-26/Daily/releases/download/macos-v1.6.1/Daily-macOS-1.6.1.pkg)：按提示安装到 `/Applications/Daily.app`。
+- [ZIP 应用包](https://github.com/march7th-26/Daily/releases/download/macos-v1.6.1/Daily-macOS-1.6.1.zip)：解压后将 `Daily.app` 拖入“应用程序”。
+- [SHA-256 校验文件](https://github.com/march7th-26/Daily/releases/download/macos-v1.6.1/SHA256SUMS.txt)。
+
+更新前先退出 Daily，替换应用不会清空待办。安装后运行不需要 Xcode。
+
+当前 macOS 包采用 **ad-hoc 本地签名，尚未进行 Apple 公证**。如果系统阻止首次打开，请先确认下载来源，再按“系统设置 → 隐私与安全性”中的提示处理。
+
+### 界面预览
+
+以下事项为演示数据。
+
+| 日间：白绿配色 | 夜间：深灰配紫色 |
+| --- | --- |
+| ![Daily macOS 日间界面](macos/docs/light.png) | ![Daily macOS 夜间界面](macos/docs/dark.png) |
+
+### 功能与操作
+
+- 输入事项后按 **Enter** 添加；点击左侧圆圈完成，再点一次恢复未完成；点击右侧 **×** 删除。
+- 已完成和未完成事项都会持续保留，不因跨天或重启清空。
+- 标题下方显示每日一言，底部显示完成数量与进度条。
+- 日间白绿、夜间深灰配紫色，自动跟随系统外观。
+- 窗口最小内容尺寸 **280 × 320**，可自由拉宽、拉高，窄窗自动收紧间距。
+- 点击菜单栏图标即可在快捷面板添加、勾选待办。
+- 通知中心提供小号、中号小组件：点击屏幕右上角日期时间 → **编辑小组件** → 搜索 **Daily** 并添加。macOS 13 上点击组件会打开应用，组件刷新由系统调度。
+
+待办仅保存在本机 `~/Library/Group Containers/group.com.example.Daylight/todos.json`。一言通过公开 HTTPS 接口获取，不上传待办内容；断网保留缓存或默认句子。两个平台的数据互不共享，目前没有跨平台同步或后台自动更新功能。
+
+### 从源码构建
+
+需要完整 Xcode，当前版本已在 **Xcode 15.2 / Intel / macOS 13.7.8** 上构建与运行。Apple Silicon 包已交叉编译，尚未进行真机测试。
+
+```bash
+cd macos
+./build.sh
+```
+
+脚本在 `macos/dist/` 输出双架构 PKG、ZIP 和校验文件。详细的共享组、签名和发布流程见 [macOS 文档](macos/README.md)。
+
 ## Windows 使用
 
 从 [Releases](https://github.com/march7th-26/Daily/releases/latest) 下载 `Daily.exe`。
@@ -46,5 +93,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 测试涵盖事项操作、中文和特殊字符持久化、损坏数据保护、实际窗口的添加/删除/完成操作、长文本换行、列表滚动，以及 Windows 原生置顶标志。
 
 置顶行为参见 [Microsoft WPF Window.Topmost 文档](https://learn.microsoft.com/en-us/dotnet/api/system.windows.window.topmost?view=netframework-4.8.1)。
-
-
