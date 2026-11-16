@@ -306,6 +306,10 @@ namespace DailyTodo
                 Check(dialog.Shell.CornerRadius.TopLeft == 20 && dialog.Shell.Background.ToString() == "#FFFCFBF8" && !dialog.ShowInTaskbar, "update dialog shares rounded cream theme and hides from taskbar");
                 window.Dispatcher.BeginInvoke(new Action(delegate {
                     dialog.UpdateLayout();
+                    var compactScroll = (ScrollViewer)dialog.Body.Children[0];
+                    var compactText = (TextBlock)compactScroll.Content;
+                    Check(compactText.FontSize == 11 && compactText.LineHeight == 17 && compactScroll.ScrollableHeight == 0,
+                        "compact update typography keeps short notes visible without scrolling");
                     Point feedbackPosition = dialog.FeedbackButton.TranslatePoint(new Point(), dialog.Body);
                     Point acceptPosition = dialog.AcceptButton.TranslatePoint(new Point(), dialog.Body);
                     Check(Math.Abs(feedbackPosition.Y + dialog.FeedbackButton.ActualHeight / 2 - acceptPosition.Y - dialog.AcceptButton.ActualHeight / 2) < 1
@@ -328,6 +332,16 @@ namespace DailyTodo
                     Check(messageScroll.ScrollableHeight > 0 && Math.Abs(feedbackPosition.Y + infoDialog.FeedbackButton.ActualHeight / 2
                         - acceptPosition.Y - infoDialog.AcceptButton.ActualHeight / 2) < 1,
                         "long notes scroll while feedback and acknowledge remain on same row");
+                    var scrollbar = (System.Windows.Controls.Primitives.ScrollBar)messageScroll.Template.FindName("PART_VerticalScrollBar", messageScroll);
+                    var track = (System.Windows.Controls.Primitives.Track)scrollbar.Template.FindName("PART_Track", scrollbar);
+                    var pill = (Border)track.Thumb.Template.FindName("Pill", track.Thumb);
+                    Check(scrollbar.ActualWidth == 10 && pill.ActualWidth == 3 && pill.CornerRadius.TopLeft == 2
+                        && pill.Background.ToString() == "#FF315E4A" && pill.Opacity == (track.Thumb.IsMouseOver ? 0.55 : 0.28),
+                        "update scrollbar has subtle thin green rounded pill and wider hit area");
+                    track.Thumb.RaiseEvent(new System.Windows.Controls.Primitives.DragDeltaEventArgs(0, 10)
+                        { RoutedEvent = System.Windows.Controls.Primitives.Thumb.DragDeltaEvent });
+                    messageScroll.UpdateLayout();
+                    Check(messageScroll.VerticalOffset > 0, "custom scrollbar thumb still drags to scroll release notes");
                     infoDialog.AcceptButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 }));
                 infoDialog.ShowDialog();

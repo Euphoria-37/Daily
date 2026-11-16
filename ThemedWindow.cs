@@ -80,8 +80,37 @@ namespace DailyTodo
             if (feedback) { Width = 400; Height = 280; }
             Body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             Body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Body.Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 12, 0, 20),
-                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, LineHeight = 23, Foreground = Color("#526159") } });
+            var messageScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Margin = feedback ? new Thickness(0, 8, 0, 12) : new Thickness(0, 12, 0, 20),
+                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap,
+                    FontSize = feedback ? 11 : 13, LineHeight = feedback ? 17 : 23, Foreground = Color("#526159") } };
+            if (feedback) messageScroll.Resources.Add(typeof(System.Windows.Controls.Primitives.ScrollBar), XamlReader.Parse(@"
+                <Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='ScrollBar'>
+                  <Setter Property='Width' Value='10'/><Setter Property='MinWidth' Value='0'/><Setter Property='Background' Value='Transparent'/>
+                  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollBar'>
+                    <Grid Background='Transparent'>
+                      <Track Name='PART_Track' Orientation='Vertical' IsDirectionReversed='True'>
+                        <Track.DecreaseRepeatButton><RepeatButton Command='ScrollBar.PageUpCommand' Focusable='False'>
+                          <RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Background='Transparent'/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton></Track.DecreaseRepeatButton>
+                        <Track.Thumb><Thumb MinHeight='18'>
+                          <Thumb.Template><ControlTemplate TargetType='Thumb'>
+                            <Grid Background='Transparent'><Border Name='Pill' Width='3' HorizontalAlignment='Center' CornerRadius='2' Background='#315E4A' Opacity='0.28'/></Grid>
+                            <ControlTemplate.Triggers>
+                              <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Pill' Property='Opacity' Value='0.55'/></Trigger>
+                              <Trigger Property='IsDragging' Value='True'><Setter TargetName='Pill' Property='Opacity' Value='0.75'/></Trigger>
+                            </ControlTemplate.Triggers>
+                          </ControlTemplate></Thumb.Template>
+                        </Thumb></Track.Thumb>
+                        <Track.IncreaseRepeatButton><RepeatButton Command='ScrollBar.PageDownCommand' Focusable='False'>
+                          <RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Background='Transparent'/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton></Track.IncreaseRepeatButton>
+                      </Track>
+                    </Grid>
+                  </ControlTemplate></Setter.Value></Setter>
+                </Style>"));
+            Body.Children.Add(messageScroll);
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             if (cancel != null) { CancelButton = Button(cancel, cancel); CancelButton.Margin = new Thickness(0, 0, 10, 0); CancelButton.IsCancel = true; CancelButton.Click += delegate { DialogResult = false; }; buttons.Children.Add(CancelButton); }
             AcceptButton = Button(accept, accept); AcceptButton.Background = Color("#3F7059"); AcceptButton.Foreground = Brushes.White;
