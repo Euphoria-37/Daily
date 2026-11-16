@@ -38,11 +38,11 @@ namespace DailyTodo
                     Save();
                     if (UpdateService.ParseVersion(release.tag_name) <= UpdateService.ParseVersion(BuildVersion.Value))
                     {
-                        Inform("检查更新", "当前版本 v" + BuildVersion.Value + " 已是最新，无需更新。", true);
+                        Inform("检查更新", "当前版本 v" + BuildVersion.Value + " 已是最新，无需更新。" + UpdateService.ReleaseNotes(release), true);
                         return;
                     }
                     UpdateService.ValidateRelease(release);
-                    if (!Confirm("发现更新", "发现新版本 " + release.tag_name + "（当前 v" + BuildVersion.Value + "）。\n立即下载更新并重启？\n现有待办和设置会保留。", "下载并更新", "稍后再说", true)) return;
+                    if (!Confirm("发现更新", "发现新版本 " + release.tag_name + "（当前 v" + BuildVersion.Value + "）。\n下载更新后将重启，现有待办和设置会保留。" + UpdateService.ReleaseNotes(release), "下载并更新", "稍后再说", true)) return;
                     check.Text = "正在下载更新…";
                     updateButton.ToolTip = "正在下载更新…";
                     Part<System.Windows.Controls.TextBlock>("SaveLabel").Text = "正在下载更新…";

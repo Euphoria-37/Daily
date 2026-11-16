@@ -60,6 +60,12 @@ namespace DailyTodo
 
         static void TestUpdates(string root)
         {
+            var notes = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<ReleaseInfo>(
+                "{\"tag_name\":\"v1.4.2\",\"body\":\"- 新增功能\\n- 修复问题 <示例>\"}");
+            Check(UpdateService.ReleaseNotes(notes).Contains("v1.4.2\n- 新增功能\n- 修复问题 <示例>"),
+                "GitHub release notes deserialize and retain multiline plain text");
+            notes.body = " ";
+            Check(UpdateService.ReleaseNotes(notes).Contains("暂未提供"), "missing release notes have explicit fallback");
             Check(UpdateService.ParseVersion("v1.10.0") > UpdateService.ParseVersion("v1.2.0"), "update versions compare numerically");
             var release = new ReleaseInfo { tag_name = "v" + BuildVersion.Value, assets = new[] {
                 new ReleaseAsset { name = "Daily.exe", state = "uploaded", size = 2048,
@@ -298,13 +304,33 @@ namespace DailyTodo
                     && feedbackContent.Children[0] is System.Windows.Shapes.Path && ((TextBlock)feedbackContent.Children[1]).Text == "用户反馈",
                     "update dialog includes vector GitHub icon and user feedback link");
                 Check(dialog.Shell.CornerRadius.TopLeft == 20 && dialog.Shell.Background.ToString() == "#FFFCFBF8" && !dialog.ShowInTaskbar, "update dialog shares rounded cream theme and hides from taskbar");
-                window.Dispatcher.BeginInvoke(new Action(delegate { dialog.AcceptButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
+                window.Dispatcher.BeginInvoke(new Action(delegate {
+                    dialog.UpdateLayout();
+                    Point feedbackPosition = dialog.FeedbackButton.TranslatePoint(new Point(), dialog.Body);
+                    Point acceptPosition = dialog.AcceptButton.TranslatePoint(new Point(), dialog.Body);
+                    Check(Math.Abs(feedbackPosition.Y + dialog.FeedbackButton.ActualHeight / 2 - acceptPosition.Y - dialog.AcceptButton.ActualHeight / 2) < 1
+                        && feedbackPosition.X + dialog.FeedbackButton.ActualWidth <= dialog.CancelButton.TranslatePoint(new Point(), dialog.Body).X,
+                        "feedback and update actions share one footer row without overlap");
+                    dialog.AcceptButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                }));
                 Check(dialog.ShowDialog() == true, "themed confirmation returns affirmative choice");
                 var cancelDialog = new DailyDialog(window, "删除记录", "确认后删除。", "删除", "保留");
-                Check(cancelDialog.FeedbackButton == null && dialog.Height == cancelDialog.Height + 40,
-                    "feedback footer has dedicated space and is limited to opted-in dialogs");
+                Check(cancelDialog.FeedbackButton == null && dialog.Width == 400 && dialog.Height == 280,
+                    "update dialog uses compact dimensions without changing other dialogs");
                 window.Dispatcher.BeginInvoke(new Action(delegate { cancelDialog.CancelButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
                 Check(cancelDialog.ShowDialog() == false, "themed cancel preserves negative choice");
+                var infoDialog = new DailyDialog(window, "检查更新", new string('测', 4000), "知道了", null, true);
+                window.Dispatcher.BeginInvoke(new Action(delegate {
+                    infoDialog.UpdateLayout();
+                    var messageScroll = (ScrollViewer)infoDialog.Body.Children[0];
+                    Point feedbackPosition = infoDialog.FeedbackButton.TranslatePoint(new Point(), infoDialog.Body);
+                    Point acceptPosition = infoDialog.AcceptButton.TranslatePoint(new Point(), infoDialog.Body);
+                    Check(messageScroll.ScrollableHeight > 0 && Math.Abs(feedbackPosition.Y + infoDialog.FeedbackButton.ActualHeight / 2
+                        - acceptPosition.Y - infoDialog.AcceptButton.ActualHeight / 2) < 1,
+                        "long notes scroll while feedback and acknowledge remain on same row");
+                    infoDialog.AcceptButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                }));
+                infoDialog.ShowDialog();
                 bool openedHistory = false;
                 window.Dispatcher.BeginInvoke(new Action(delegate {
                     foreach (Window child in window.OwnedWindows) if (child is HistoryWindow) { openedHistory = true; child.Close(); break; }

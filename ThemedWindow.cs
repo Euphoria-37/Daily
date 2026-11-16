@@ -77,6 +77,7 @@ namespace DailyTodo
         public DailyDialog(Window owner, string title, string message, string accept, string cancel, bool feedback = false)
             : base(owner, title, 440, 300)
         {
+            if (feedback) { Width = 400; Height = 280; }
             Body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             Body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Body.Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 12, 0, 20),
@@ -85,11 +86,14 @@ namespace DailyTodo
             if (cancel != null) { CancelButton = Button(cancel, cancel); CancelButton.Margin = new Thickness(0, 0, 10, 0); CancelButton.IsCancel = true; CancelButton.Click += delegate { DialogResult = false; }; buttons.Children.Add(CancelButton); }
             AcceptButton = Button(accept, accept); AcceptButton.Background = Color("#3F7059"); AcceptButton.Foreground = Brushes.White;
             AcceptButton.IsDefault = true; AcceptButton.Click += delegate { DialogResult = true; };
-            buttons.Children.Add(AcceptButton); Grid.SetRow(buttons, 1); Body.Children.Add(buttons);
+            var footer = new Grid();
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            footer.ColumnDefinitions.Add(new ColumnDefinition());
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            buttons.Children.Add(AcceptButton); Grid.SetColumn(buttons, 2); footer.Children.Add(buttons);
+            Grid.SetRow(footer, 1); Body.Children.Add(footer);
             if (feedback)
             {
-                Height += 40;
-                Body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 var content = new StackPanel { Orientation = Orientation.Horizontal };
                 content.Children.Add(new System.Windows.Shapes.Path { Width = 17, Height = 17, Stretch = Stretch.Uniform,
                     Stroke = Color("#62746A"), StrokeThickness = 1.7, StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
@@ -99,7 +103,9 @@ namespace DailyTodo
                 FeedbackButton = Button("", "用户反馈 · GitHub");
                 FeedbackButton.Content = content; FeedbackButton.Background = Brushes.Transparent;
                 FeedbackButton.Foreground = Color("#62746A"); FeedbackButton.Padding = new Thickness(8, 4, 8, 4);
-                FeedbackButton.HorizontalAlignment = HorizontalAlignment.Left; FeedbackButton.Margin = new Thickness(-8, 8, 0, 0);
+                FeedbackButton.HorizontalAlignment = HorizontalAlignment.Left;
+                FeedbackButton.VerticalAlignment = VerticalAlignment.Center; FeedbackButton.Margin = new Thickness(-8, 0, 0, 0);
+                FeedbackButton.FontSize = 12;
                 FeedbackButton.ToolTip = FeedbackUrl;
                 FeedbackButton.Click += delegate {
                     try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(FeedbackUrl) { UseShellExecute = true }); }
@@ -108,7 +114,7 @@ namespace DailyTodo
                         text.Text = "无法打开，请重试";
                     }
                 };
-                Grid.SetRow(FeedbackButton, 2); Body.Children.Add(FeedbackButton);
+                footer.Children.Add(FeedbackButton);
             }
         }
         public static void Info(Window owner, string title, string message, bool feedback = false) { new DailyDialog(owner, title, message, "知道了", null, feedback).ShowDialog(); }

@@ -23,6 +23,7 @@ namespace DailyTodo
     public class ReleaseInfo
     {
         public string tag_name { get; set; }
+        public string body { get; set; }
         public bool draft { get; set; }
         public bool prerelease { get; set; }
         public ReleaseAsset[] assets { get; set; }
@@ -32,6 +33,12 @@ namespace DailyTodo
     {
         public const long MaxDownloadSize = 64 * 1024 * 1024;
         public static readonly string StagingRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyTodo", "Updates");
+
+        public static string ReleaseNotes(ReleaseInfo release)
+        {
+            return "\n\n更新日志 · " + release.tag_name + "\n"
+                + (string.IsNullOrWhiteSpace(release.body) ? "此版本暂未提供更新日志。" : release.body.Trim());
+        }
 
         public static Version ParseVersion(string tag)
         {
