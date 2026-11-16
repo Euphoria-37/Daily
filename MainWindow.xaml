@@ -81,16 +81,15 @@
       </ControlTemplate></Setter.Value></Setter>
     </Style>
   </Window.Resources>
-  <Border Margin="12" Background="#FCFBF8" CornerRadius="20" BorderBrush="#DDE1D9" BorderThickness="1">
+  <Border x:Name="WindowSurface" Margin="12" Background="#FCFBF8" CornerRadius="20" BorderBrush="#DDE1D9" BorderThickness="1">
     <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.16" Color="#26382C"/></Border.Effect>
     <Grid Margin="22,12,22,16">
       <Grid.RowDefinitions>
-        <RowDefinition Height="38"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-        <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+        <RowDefinition Height="38"/><RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <Grid x:Name="TitleBar" Background="Transparent" Margin="-8,0,-8,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <StackPanel x:Name="UtilityButtons" Orientation="Horizontal" VerticalAlignment="Center">
           <ToggleButton x:Name="PinButton" Style="{StaticResource PinStyle}" AutomationProperties.Name="窗口置顶"/>
           <Button x:Name="UpdateButton" Width="36" Height="32" Padding="0" ToolTip="检查更新" AutomationProperties.Name="检查更新">
             <Grid Width="22" Height="22">
@@ -103,17 +102,22 @@
           </Button>
         </StackPanel>
         <TextBlock Grid.Column="1" Text="DAILY" FontSize="10" FontWeight="SemiBold" Foreground="#6F7A71" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
-        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+        <StackPanel x:Name="WindowButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
           <Button x:Name="MinimizeButton" Width="36" Height="32" Padding="0" ToolTip="收起到托盘" AutomationProperties.Name="最小化窗口"><Path Data="M 0,0 L 12,0" Stroke="#62746A" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Button>
           <Button x:Name="CloseButton" Width="36" Height="32" Padding="0" ToolTip="退出 Daily" AutomationProperties.Name="关闭窗口"><Path Data="M 0,0 L 10,10 M 10,0 L 0,10" Stroke="#93665E" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Button>
         </StackPanel>
       </Grid>
-      <StackPanel Grid.Row="1" Margin="0,18,0,20">
+      <Grid x:Name="TodoBody" Grid.Row="1" MaxWidth="560" HorizontalAlignment="Stretch">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,18,0,20">
         <TextBlock x:Name="DateLabel" FontSize="12" Foreground="#67756C" Margin="0,0,0,7"/>
         <TextBlock Text="Daily" FontSize="28" FontWeight="SemiBold"/>
         <TextBlock x:Name="QuoteLabel" Text="把今天，过得有条不紊。" TextWrapping="Wrap" Foreground="#657269" FontSize="12" Margin="1,8,0,0"/>
       </StackPanel>
-      <Border Grid.Row="2" Background="#F0F2EC" CornerRadius="12" BorderBrush="#E2E6DD" BorderThickness="1" Padding="12,6,6,6" Margin="0,0,0,18">
+      <Border Grid.Row="1" Background="#F0F2EC" CornerRadius="12" BorderBrush="#E2E6DD" BorderThickness="1" Padding="12,6,6,6" Margin="0,0,0,18">
         <Grid>
           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="36"/></Grid.ColumnDefinitions>
           <TextBox x:Name="TaskInput" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" Padding="0,4" MaxLength="200" FontSize="13" Foreground="#293831" AutomationProperties.Name="新的待办事项"/>
@@ -121,7 +125,7 @@
           <Button x:Name="AddButton" Grid.Column="1" Width="32" Height="32" Padding="0" Background="#3F7059" Foreground="White" ToolTip="添加 · Enter" AutomationProperties.Name="添加待办"><TextBlock Text="+" FontSize="22" Margin="0,-2,0,0"/></Button>
         </Grid>
       </Border>
-      <Grid Grid.Row="3">
+      <Grid Grid.Row="2">
         <ScrollViewer x:Name="TaskScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
           <StackPanel x:Name="TaskRows"/>
         </ScrollViewer>
@@ -131,7 +135,7 @@
           <TextBlock Text="从一件简单的事开始就好" Foreground="#69766D" FontSize="12" Margin="0,7,0,0" HorizontalAlignment="Center"/>
         </StackPanel>
       </Grid>
-      <StackPanel Grid.Row="4" Margin="0,14,0,0">
+      <StackPanel Grid.Row="3" Margin="0,14,0,0">
         <Border Height="1" Background="#E6E9E1" Margin="0,0,0,13"/>
         <Grid>
           <TextBlock x:Name="ProgressLabel" Foreground="#5E6C62" FontSize="11" VerticalAlignment="Center"/>
@@ -139,6 +143,7 @@
         </Grid>
         <ProgressBar x:Name="Progress" Minimum="0" Maximum="1" Height="3" BorderThickness="0" Background="#E6EAE1" Foreground="#65876A" Margin="0,10,0,0"/>
       </StackPanel>
+      </Grid>
     </Grid>
   </Border>
 </Window>

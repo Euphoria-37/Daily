@@ -99,6 +99,7 @@ namespace DailyTodo
             rows = Part<StackPanel>("TaskRows");
             pin = Part<ToggleButton>("PinButton");
             pin.IsChecked = store.Data.Pinned;
+            InitializeResponsiveLayout();
             Topmost = store.Data.Pinned;
             UpdatePin();
             pin.Checked += PinChanged;
@@ -162,6 +163,25 @@ namespace DailyTodo
         }
 
         static bool Finite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
+
+        void InitializeResponsiveLayout()
+        {
+            var surface = Part<Border>("WindowSurface");
+            var shadow = surface.Effect;
+            Action refresh = delegate {
+                bool maximized = WindowState == WindowState.Maximized;
+                surface.Margin = new Thickness(maximized ? 0 : 12);
+                surface.CornerRadius = new CornerRadius(maximized ? 0 : 20);
+                surface.BorderThickness = new Thickness(maximized ? 0 : 1);
+                surface.Effect = maximized ? null : shadow;
+                var destination = Part<StackPanel>(maximized || ActualWidth >= 700 ? "WindowButtons" : "UtilityButtons");
+                var parent = (Panel)pin.Parent;
+                if (parent != destination) { parent.Children.Remove(pin); destination.Children.Insert(0, pin); }
+            };
+            StateChanged += delegate { refresh(); };
+            SizeChanged += delegate { refresh(); };
+            refresh();
+        }
 
         void UpdateDate()
         {

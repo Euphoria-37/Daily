@@ -341,6 +341,17 @@ namespace DailyTodo
                 window.UpdateLayout();
                 Check(input.ActualWidth > 100 && rows.ActualWidth > 200, "usable layout at minimum size");
                 var normalContent = window.Content;
+                var surface = (Border)window.FindName("WindowSurface");
+                var body = (Grid)window.FindName("TodoBody");
+                window.Width = 3440;
+                window.UpdateLayout();
+                Point bodyOrigin = body.TranslatePoint(new Point(), surface);
+                Check(body.ActualWidth <= 560 && Math.Abs(bodyOrigin.X - (surface.ActualWidth - body.ActualWidth) / 2) < 1,
+                    "ultrawide window centers bounded reading column");
+                Check(pinControl.Parent == minimizeControl.Parent && surface.CornerRadius.TopLeft == 20,
+                    "wide normal window groups window controls and keeps rounded shell");
+                window.Width = 340;
+                window.UpdateLayout();
                 var snapArea = new Rect(0, 0, 1200, 900);
                 window.DockTo(2, snapArea);
                 window.CollapseDock();
@@ -349,6 +360,10 @@ namespace DailyTodo
                 window.CollapseDock();
                 Check(!window.DockCollapsed && window.Content == normalContent && window.ActualWidth > 340,
                     "maximizing collapsed dock restores full usable content");
+                Check(surface.Margin == new Thickness(0) && surface.CornerRadius.TopLeft == 0 && surface.Effect == null && surface.BorderThickness == new Thickness(0),
+                    "maximized shell has no transparent inset rounded corners or shadow");
+                Check(pinControl.Parent == minimizeControl.Parent && body.ActualWidth <= 560 && input.ActualWidth > 100,
+                    "maximized content stays readable and window buttons remain together");
                 window.TryDock(new Size(window.ActualWidth, window.ActualHeight));
                 window.UpdateDockHover(new Point(-10000, -10000), false, DateTime.UtcNow.AddSeconds(2));
                 Check(!window.DockCollapsed && window.WindowState == WindowState.Maximized,
@@ -372,6 +387,9 @@ namespace DailyTodo
                 window.Width = 340; window.Height = 400;
                 window.UpdateLayout();
                 var longRow = (Grid)((Border)rows.Children[0]).Child;
+                Check(surface.Margin == new Thickness(12) && surface.CornerRadius.TopLeft == 20 && surface.Effect != null
+                    && pinControl.Parent == updateControl.Parent,
+                    "restored compact window recovers original shell and button layout");
                 Check(((TextBlock)longRow.Children[1]).ActualHeight > 30, "long text wraps without horizontal overflow");
                 for (int i = 0; i < 30; i++)
                 {
