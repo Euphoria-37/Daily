@@ -1,0 +1,48 @@
+name: Publish macOS release
+
+on:
+  push:
+    tags:
+      - 'macos-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check tag and application version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macos/App/Info.plist)
+          test "$TAG" = "macos-v$VERSION"
+          xcodebuild -version
+      - name: Build universal application and packages
+        run: ./macos/build.sh
+      - name: Publish macOS assets without replacing the Windows latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macos/App/Info.plist)
+          ASSETS=("macos/dist/Daily-macOS-$VERSION.pkg" "macos/dist/Daily-macOS-$VERSION.zip" "macos/dist/SHA256SUMS.txt")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" --notes-file macos/RELEASE_NOTES.md --latest=false
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --verify-tag \
+              --title "Daily for macOS $VERSION" \
+              --notes-file macos/RELEASE_NOTES.md --latest=false
+          fi
