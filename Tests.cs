@@ -10,6 +10,34 @@ namespace DailyTodo
     public static class Tests
     {
         static int count;
+        static DragEventArgs TestDrop(DependencyObject target)
+        {
+            // WPF constructs these args internally during OLE drag/drop.
+            var args = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, null,
+                new object[] { new DataObject("Daily.TaskMove", "test"), DragDropKeyStates.None, DragDropEffects.Move, target, new Point(1, 1) }, null);
+            args.RoutedEvent = DragDrop.DropEvent;
+            return args;
+        }
+        static void TestOrdering(string root)
+        {
+            var store = new TodoStore(Path.Combine(root, "order.xml"));
+            store.Add("A"); store.Add("B"); store.Add("C"); store.Add("D");
+            var a = store.Data.Items[0]; var b = store.Data.Items[1]; var c = store.Data.Items[2]; var d = store.Data.Items[3];
+            store.Toggle(c.Id); store.Archive(b.Id);
+            var created = c.CreatedAt; var completed = c.CompletedAt;
+            Func<string, string, bool, bool> reorder = store.Move;
+            Check(reorder(c.Id, a.Id, false) && store.Data.Items[0] == c, "move older or completed task to first position");
+            Check(reorder(c.Id, d.Id, true) && store.Data.Items[3] == c, "move task down after last visible item");
+            Check(!reorder(c.Id, c.Id, false) && !reorder(b.Id, a.Id, false) && !reorder(a.Id, b.Id, false)
+                && !reorder("missing", a.Id, false), "self archived and missing reorder targets are rejected");
+            Check(!reorder(c.Id, d.Id, true), "already adjacent reorder is a no-op");
+            store.Save();
+            var restored = new TodoStore(store.FilePath);
+            Check(string.Join(",", restored.Data.Items.ConvertAll(t => t.Text)) == "A,B,D,C", "manual order survives restart including archived records");
+            Check(c.CreatedAt == created && c.CompletedAt == completed && c.Done && b.Archived && store.Data.Items.Count == 4,
+                "reorder preserves all task content timestamps and states");
+        }
         static void Check(bool value, string name)
         {
             if (!value) throw new Exception("FAIL: " + name);
@@ -238,6 +266,7 @@ namespace DailyTodo
                 catch (System.Net.Http.HttpRequestException) { offline = true; }
                 Check(offline && store.Data.QuoteDate == "2026-11-15", "network failure does not mark date refreshed");
 
+                TestOrdering(dir);
                 var app = new Application();
                 var window = new MainWindow(store, false);
                 window.Show();
@@ -282,6 +311,23 @@ namespace DailyTodo
                 ((Button)window.FindName("AddButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(store.Data.Items.Count == 1 && input.Text == "", "add through actual button");
                 var rows = (StackPanel)window.FindName("TaskRows");
+                store.Add("拖动排序测试");
+                var movingTask = store.Data.Items[1];
+                window.RenderTasks(); window.UpdateLayout();
+                var targetCard = (Border)rows.Children[0];
+                var dragField = typeof(MainWindow).GetField("draggedItem", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                dragField.SetValue(window, movingTask);
+                var drop = TestDrop(targetCard);
+                targetCard.RaiseEvent(drop);
+                dragField.SetValue(window, null);
+                Check(drop.Handled && drop.Effects == DragDropEffects.Move && store.Data.Items[0] == movingTask
+                    && ((TextBlock)((Grid)((Border)rows.Children[0]).Child).Children[1]).Text == movingTask.Text,
+                    "dropping task above another updates rendered order");
+                Check(new TodoStore(store.FilePath).Data.Items[0].Id == movingTask.Id, "drop saves order immediately");
+                var foreignDrop = TestDrop(rows.Children[0]);
+                ((Border)rows.Children[0]).RaiseEvent(foreignDrop);
+                Check(foreignDrop.Effects == DragDropEffects.None && store.Data.Items[0] == movingTask, "external or cancelled drag cannot reorder tasks");
+                store.Delete(movingTask.Id); window.RenderTasks(); store.Save();
                 var grid = (Grid)((Border)rows.Children[0]).Child;
                 input.Focus(); Pump(20);
                 Check(((Button)grid.Children[2]).Opacity == (grid.IsMouseOver ? 1 : 0), "row actions follow actual mouse hover while input is focused");

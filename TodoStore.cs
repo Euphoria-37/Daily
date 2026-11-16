@@ -91,6 +91,20 @@ namespace DailyTodo
         }
         public void Delete(string id) { Data.Items.RemoveAll(t => t.Id == id); }
 
+        public bool Move(string id, string targetId, bool after)
+        {
+            int from = Data.Items.FindIndex(t => t.Id == id && !t.Archived);
+            int target = Data.Items.FindIndex(t => t.Id == targetId && !t.Archived);
+            if (from < 0 || target < 0 || from == target) return false;
+            int destination = target + (after ? 1 : 0);
+            if (from < destination) destination--;
+            if (from == destination) return false;
+            var item = Data.Items[from];
+            Data.Items.RemoveAt(from);
+            Data.Items.Insert(destination, item);
+            return true;
+        }
+
         public bool Archive(string id)
         {
             var item = Data.Items.Find(t => t.Id == id);

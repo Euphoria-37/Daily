@@ -23,6 +23,7 @@ namespace DailyTodo
         readonly DispatcherTimer dateTimer;
         bool saveFailed;
         Action finishActiveEdit;
+        TodoItem draggedItem;
         System.Windows.Forms.NotifyIcon tray;
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
@@ -225,7 +226,7 @@ namespace DailyTodo
                 Action update = delegate
                 {
                     label.TextDecorations = item.Done ? TextDecorations.Strikethrough : null;
-                    label.Foreground = (Brush)new BrushConverter().ConvertFromString(item.Done ? "#778277" : "#293831");
+                    label.Foreground = ThemedWindow.Color(item.Done ? "#778277" : "#293831");
                     circle.ToolTip = item.Done ? "标记为未完成" : "标记为已完成";
                 };
                 update();
@@ -253,7 +254,7 @@ namespace DailyTodo
                 Grid.SetColumn(editor, 1);
                 AutomationProperties.SetName(editor, "编辑待办事项");
                 Button archive = null;
-                label.ToolTip = "双击编辑 · Enter 保存 · Esc 取消";
+                label.ToolTip = "拖动调整顺序 · 双击编辑 · Enter 保存 · Esc 取消";
                 Action<bool> finish = delegate(bool save) {
                     if (editor.Visibility != Visibility.Visible) return;
                     finishActiveEdit = null;
@@ -295,10 +296,58 @@ namespace DailyTodo
                 AutomationProperties.SetName(archive, "归档：" + item.Text);
                 archive.Click += delegate { if (finishActiveEdit != null) finishActiveEdit(); store.Archive(item.Id); RenderTasks(); Save(); input.Focus(); };
                 row.Children.Add(archive);
-                rows.Children.Add(new Border { Child = row, BorderBrush = (Brush)new BrushConverter().ConvertFromString("#ECEEE7"), BorderThickness = new Thickness(0, 0, 0, 1) });
+                var card = new Border { Child = row, BorderBrush = ThemedWindow.Color("#ECEEE7"), BorderThickness = new Thickness(0, 0, 0, 1) };
+                EnableReordering(card, label, item);
+                rows.Children.Add(card);
             }
             Part<StackPanel>("EmptyState").Visibility = rows.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             UpdateProgress();
+        }
+
+        void EnableReordering(Border card, TextBlock label, TodoItem item)
+        {
+            Point? start = null;
+            label.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) {
+                start = e.ClickCount == 1 ? (Point?)e.GetPosition(label) : null;
+            };
+            label.MouseMove += delegate(object sender, MouseEventArgs e) {
+                if (!start.HasValue || e.LeftButton != MouseButtonState.Pressed || label.Visibility != Visibility.Visible) { start = null; return; }
+                Vector delta = e.GetPosition(label) - start.Value;
+                if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+                start = null;
+                if (finishActiveEdit != null) finishActiveEdit();
+                draggedItem = item;
+                try { DragDrop.DoDragDrop(label, new DataObject("Daily.TaskMove", item.Id), DragDropEffects.Move); }
+                finally { draggedItem = null; }
+                e.Handled = true;
+            };
+            card.AllowDrop = true;
+            Brush normal = card.BorderBrush;
+            Action clear = delegate { card.BorderBrush = normal; card.BorderThickness = new Thickness(0, 0, 0, 1); };
+            card.DragOver += delegate(object sender, DragEventArgs e) {
+                e.Effects = draggedItem != null && draggedItem != item ? DragDropEffects.Move : DragDropEffects.None;
+                if (e.Effects == DragDropEffects.Move)
+                {
+                    bool after = e.GetPosition(card).Y >= card.ActualHeight / 2;
+                    card.BorderBrush = (Brush)Resources["Accent"];
+                    card.BorderThickness = after ? new Thickness(0, 0, 0, 2) : new Thickness(0, 2, 0, 0);
+                    var scroller = Part<ScrollViewer>("TaskScroller");
+                    double y = e.GetPosition(scroller).Y;
+                    if (y < 28) scroller.LineUp();
+                    else if (y > scroller.ActualHeight - 28) scroller.LineDown();
+                }
+                else clear();
+                e.Handled = true;
+            };
+            card.DragLeave += delegate { clear(); };
+            card.Drop += delegate(object sender, DragEventArgs e) {
+                bool after = e.GetPosition(card).Y >= card.ActualHeight / 2;
+                clear();
+                e.Effects = DragDropEffects.None;
+                if (draggedItem != null && store.Move(draggedItem.Id, item.Id, after))
+                { e.Effects = DragDropEffects.Move; RenderTasks(); Save(); }
+                e.Handled = true;
+            };
         }
 
         void UpdateProgress()

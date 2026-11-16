@@ -48,12 +48,12 @@ namespace DailyTodo
             };
             Closed += delegate { collapseTimer.Stop(); };
             dockStrip = new Border {
-                Background = (Brush)new BrushConverter().ConvertFromString("#FCFBF8"),
-                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#C8D5C8"),
+                Background = ThemedWindow.Color("#FCFBF8"),
+                BorderBrush = ThemedWindow.Color("#C8D5C8"),
                 BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
                 Cursor = Cursors.Hand, ToolTip = "移入展开每日待办",
                 Child = new Border { Width = 3, Height = 36, CornerRadius = new CornerRadius(1.5),
-                    Background = (Brush)new BrushConverter().ConvertFromString("#65876A"),
+                    Background = ThemedWindow.Color("#65876A"),
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
             };
         }
