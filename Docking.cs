@@ -18,8 +18,11 @@ namespace DailyTodo
         DispatcherTimer collapseTimer;
         Rect stripBounds;
         DateTime? pointerOutsideSince;
+        bool systemMoving;
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         struct CursorPoint { public int X; public int Y; }
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct WindowLimits { public CursorPoint Reserved, MaxSize, MaxPosition, MinTrack, MaxTrack; }
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         static extern bool GetCursorPos(out CursorPoint point);
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -28,6 +31,13 @@ namespace DailyTodo
         void InitializeDocking()
         {
             fullContent = (Grid)Content;
+            SourceInitialized += delegate {
+                System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle)
+                    .AddHook(SystemWindowMessage);
+            };
+            StateChanged += delegate {
+                if (WindowState != WindowState.Normal) CancelDockForSystemLayout();
+            };
             collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             collapseTimer.Tick += delegate {
                 var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -50,6 +60,7 @@ namespace DailyTodo
 
         internal void UpdateDockHover(Point pointer, bool dragging, DateTime now)
         {
+            if (systemMoving || WindowState != WindowState.Normal) { pointerOutsideSince = null; return; }
             if (checkingUpdate || modalDepth > 0) { pointerOutsideSince = null; return; }
             if (dockSide == 0) return;
             // Rounded corners and transparent shadow margins can produce MouseLeave
@@ -74,8 +85,10 @@ namespace DailyTodo
             collapseTimer.Stop();
         }
 
-        void TryDock()
+        internal void TryDock(Size beforeDrag)
         {
+            // Snap can resize a normal-state window, not just maximize it.
+            if (WindowState != WindowState.Normal || Math.Abs(ActualWidth - beforeDrag.Width) > 1 || Math.Abs(ActualHeight - beforeDrag.Height) > 1) return;
             var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             var screen = System.Windows.Forms.Screen.FromHandle(handle).WorkingArea;
             Point a = PointFromScreen(new Point(screen.Left, screen.Top));
@@ -89,6 +102,7 @@ namespace DailyTodo
 
         internal void DockTo(int side, Rect area)
         {
+            if (WindowState != WindowState.Normal || systemMoving) return;
             ExpandDock();
             dockSide = side;
             dockArea = area;
@@ -104,7 +118,7 @@ namespace DailyTodo
 
         internal void CollapseDock()
         {
-            if (dockSide == 0 || DockCollapsed) return;
+            if (dockSide == 0 || DockCollapsed || systemMoving || WindowState != WindowState.Normal) return;
             expandedBounds = new Rect(Left, Top, Width, Height);
             DockCollapsed = true;
             Content = null;
@@ -135,6 +149,46 @@ namespace DailyTodo
             MinWidth = 340;
             MinHeight = 400;
             ResizeMode = ResizeMode.CanResizeWithGrip;
+        }
+
+        void CancelDockForSystemLayout()
+        {
+            dockSide = 0;
+            pointerOutsideSince = null;
+            collapseTimer.Stop();
+            if (!DockCollapsed) return;
+            DockCollapsed = false;
+            Content = null;
+            Content = fullContent;
+            MinWidth = 340;
+            MinHeight = 400;
+            ResizeMode = ResizeMode.CanResizeWithGrip;
+            // Keep Windows' new bounds, but restore a useful normal-state size.
+            Width = expandedBounds.Width;
+            Height = expandedBounds.Height;
+        }
+
+        IntPtr SystemWindowMessage(IntPtr handle, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (message == 0x0231) { Undock(); systemMoving = true; } // WM_ENTERSIZEMOVE
+            else if (message == 0x0232) systemMoving = false; // WM_EXITSIZEMOVE
+            else if (message == 0x0024) // WM_GETMINMAXINFO: respect this monitor's taskbar.
+            {
+                var screen = System.Windows.Forms.Screen.FromHandle(handle);
+                var work = screen.WorkingArea;
+                var limits = (WindowLimits)System.Runtime.InteropServices.Marshal.PtrToStructure(lParam, typeof(WindowLimits));
+                limits.MaxPosition.X = work.Left - screen.Bounds.Left;
+                limits.MaxPosition.Y = work.Top - screen.Bounds.Top;
+                limits.MaxSize.X = work.Width;
+                limits.MaxSize.Y = work.Height;
+                var source = System.Windows.Interop.HwndSource.FromHwnd(handle);
+                var scale = source.CompositionTarget.TransformToDevice;
+                limits.MinTrack.X = (int)Math.Ceiling(MinWidth * scale.M11);
+                limits.MinTrack.Y = (int)Math.Ceiling(MinHeight * scale.M22);
+                System.Runtime.InteropServices.Marshal.StructureToPtr(limits, lParam, false);
+                handled = true;
+            }
+            return IntPtr.Zero;
         }
     }
 }

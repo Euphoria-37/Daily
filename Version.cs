@@ -1,7 +1,7 @@
-﻿using System.Reflection;
+using System.Reflection;
 [assembly: AssemblyVersion(DailyTodo.BuildVersion.Value)]
 [assembly: AssemblyFileVersion(DailyTodo.BuildVersion.Value)]
 namespace DailyTodo
 {
-    public static class BuildVersion { public const string Value = "1.3.0"; }
+    public static class BuildVersion { public const string Value = "1.3.1"; }
 }

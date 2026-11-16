@@ -113,7 +113,23 @@ namespace DailyTodo
                     if (target is ButtonBase) return;
                     target = VisualTreeHelper.GetParent(target);
                 }
-                if (e.ButtonState == MouseButtonState.Pressed) { Undock(); DragMove(); TryDock(); }
+                if (e.ButtonState == MouseButtonState.Pressed)
+                {
+                    Undock();
+                    if (WindowState == WindowState.Maximized)
+                    {
+                        double fraction = Math.Max(0, Math.Min(1, e.GetPosition(this).X / ActualWidth));
+                        Point cursor = PointToScreen(e.GetPosition(this));
+                        double restoredWidth = RestoreBounds.Width;
+                        WindowState = WindowState.Normal;
+                        Point local = PointFromScreen(cursor);
+                        Left += local.X - restoredWidth * fraction;
+                        Top += local.Y - 24;
+                    }
+                    Size beforeDrag = new Size(ActualWidth, ActualHeight);
+                    DragMove();
+                    Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(delegate { TryDock(beforeDrag); }));
+                }
             };
             Part<Button>("AddButton").Click += delegate { AddTask(); };
             Part<Button>("HistoryButton").Click += delegate { ShowHistory(); };
@@ -297,10 +313,11 @@ namespace DailyTodo
         {
             if (finishActiveEdit != null) finishActiveEdit();
             ExpandDock();
-            store.Data.Left = Left;
-            store.Data.Top = Top;
-            store.Data.Width = Width;
-            store.Data.Height = Height;
+            Rect bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+            store.Data.Left = bounds.Left;
+            store.Data.Top = bounds.Top;
+            store.Data.Width = bounds.Width;
+            store.Data.Height = bounds.Height;
             Save();
             if (pendingUpdate != null && !SaveBeforeUpdate())
             {

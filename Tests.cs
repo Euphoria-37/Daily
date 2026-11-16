@@ -18,6 +18,8 @@ namespace DailyTodo
         }
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
         static extern int GetWindowLong(IntPtr handle, int index);
+        [DllImport("user32.dll")]
+        static extern IntPtr SendMessage(IntPtr handle, int message, IntPtr wParam, IntPtr lParam);
 
         static void Pump(int milliseconds)
         {
@@ -338,6 +340,37 @@ namespace DailyTodo
                 window.Height = 400;
                 window.UpdateLayout();
                 Check(input.ActualWidth > 100 && rows.ActualWidth > 200, "usable layout at minimum size");
+                var normalContent = window.Content;
+                var snapArea = new Rect(0, 0, 1200, 900);
+                window.DockTo(2, snapArea);
+                window.CollapseDock();
+                window.WindowState = WindowState.Maximized;
+                Pump(100);
+                window.CollapseDock();
+                Check(!window.DockCollapsed && window.Content == normalContent && window.ActualWidth > 340,
+                    "maximizing collapsed dock restores full usable content");
+                window.TryDock(new Size(window.ActualWidth, window.ActualHeight));
+                window.UpdateDockHover(new Point(-10000, -10000), false, DateTime.UtcNow.AddSeconds(2));
+                Check(!window.DockCollapsed && window.WindowState == WindowState.Maximized,
+                    "maximized window cannot enter edge auto-hide");
+                window.WindowState = WindowState.Normal;
+                window.Left = 0; window.Top = 0; window.Width = 600; window.Height = 700;
+                window.UpdateLayout();
+                window.TryDock(new Size(340, 400));
+                window.CollapseDock();
+                Check(!window.DockCollapsed && window.Width == 600 && window.Height == 700,
+                    "Windows snap resize takes priority over edge docking");
+                window.DockTo(-1, snapArea);
+                window.CollapseDock();
+                Check(window.DockCollapsed, "edge docking remains available after system restore");
+                SendMessage(new WindowInteropHelper(window).Handle, 0x0231, IntPtr.Zero, IntPtr.Zero);
+                window.CollapseDock();
+                Check(!window.DockCollapsed && window.Content == normalContent,
+                    "native move resize loop expands dock and suspends auto-hide");
+                SendMessage(new WindowInteropHelper(window).Handle, 0x0232, IntPtr.Zero, IntPtr.Zero);
+                window.ExpandDock();
+                window.Width = 340; window.Height = 400;
+                window.UpdateLayout();
                 var longRow = (Grid)((Border)rows.Children[0]).Child;
                 Check(((TextBlock)longRow.Children[1]).ActualHeight > 30, "long text wraps without horizontal overflow");
                 for (int i = 0; i < 30; i++)
