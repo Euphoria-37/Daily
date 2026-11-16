@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,9 +31,9 @@ namespace DailyTodo
         static void TestUpdates(string root)
         {
             Check(UpdateService.ParseVersion("v1.10.0") > UpdateService.ParseVersion("v1.2.0"), "update versions compare numerically");
-            var release = new ReleaseInfo { tag_name = "v1.2.0", assets = new[] {
+            var release = new ReleaseInfo { tag_name = "v" + BuildVersion.Value, assets = new[] {
                 new ReleaseAsset { name = "Daily.exe", state = "uploaded", size = 2048,
-                    browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v1.2.0/Daily.exe",
+                    browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v" + BuildVersion.Value + "/Daily.exe",
                     digest = "sha256:" + new string('0', 64) }
             }};
             Check(UpdateService.ValidateRelease(release) == release.assets[0], "only named official release asset accepted");
@@ -41,7 +41,7 @@ namespace DailyTodo
             bool rejected = false;
             try { UpdateService.ValidateRelease(release); } catch (InvalidDataException) { rejected = true; }
             Check(rejected, "foreign update URL rejected");
-            release.assets[0].browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v1.2.0/Daily.exe";
+            release.assets[0].browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v" + BuildVersion.Value + "/Daily.exe";
             release.assets[0].digest = null;
             rejected = false;
             try { UpdateService.ValidateRelease(release); } catch (InvalidDataException) { rejected = true; }
@@ -163,6 +163,29 @@ namespace DailyTodo
             Check(HistoryWindow.TimeLabel(null) == "未记录", "missing historical dates have an explicit label");
         }
 
+        static void TestDailyUpdateStatus(string root)
+        {
+            var cache = new TodoStore(Path.Combine(root, "update-status", "tasks.xml"));
+            var day = new DateTime(2026, 11, 16, 10, 0, 0);
+            Check(UpdateStatus.NeedsCheck(cache.Data, day), "first launch needs daily update check");
+            UpdateStatus.Record(cache.Data, new ReleaseInfo { tag_name = "v" + BuildVersion.Value }, day);
+            Check(!UpdateStatus.NeedsCheck(cache.Data, day.AddHours(3)) && !UpdateStatus.HasUpdate(cache.Data), "same-day current release uses cache without badge");
+            Check(UpdateStatus.NeedsCheck(cache.Data, day.AddDays(1)), "new system date requires another update check");
+            var newer = new ReleaseInfo { tag_name = "v99.0.0", assets = new[] { new ReleaseAsset {
+                name = "Daily.exe", state = "uploaded", size = 2048, digest = "sha256:" + new string('0', 64),
+                browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v99.0.0/Daily.exe" } } };
+            UpdateStatus.Record(cache.Data, newer, day);
+            cache.Save();
+            cache = new TodoStore(cache.FilePath);
+            Check(UpdateStatus.HasUpdate(cache.Data) && !UpdateStatus.NeedsCheck(cache.Data, day), "new-release badge state survives same-day restart");
+            string date = cache.Data.UpdateCheckDate;
+            bool rejected = false;
+            try { UpdateStatus.Record(cache.Data, new ReleaseInfo { tag_name = "invalid" }, day.AddDays(1)); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected && cache.Data.UpdateCheckDate == date && UpdateStatus.HasUpdate(cache.Data), "failed check preserves cached badge and permits retry");
+            cache.Data.UpdateCheckBuild = "0.0.0";
+            Check(UpdateStatus.NeedsCheck(cache.Data, day), "installed new build checks again on the same day");
+        }
+
         [STAThread]
         public static int Main()
         {
@@ -171,6 +194,7 @@ namespace DailyTodo
             {
                 TestUpdates(dir);
                 TestHistory(dir);
+                TestDailyUpdateStatus(dir);
                 var store = new TodoStore(Path.Combine(dir, "tasks.xml"));
                 Check(!store.Add(" \r\n "), "blank task rejected");
                 Check(store.Add("  中文事项 <test> & emoji 🎉  "), "unicode task accepted");
@@ -228,6 +252,12 @@ namespace DailyTodo
                     && minimizeControl.TransformToAncestor(header).Transform(new Point()).X < closeControl.TransformToAncestor(header).Transform(new Point()).X,
                     "header places pin and update left, minimize and close right");
                 Check(updateControl.IsEnabled && System.Windows.Automation.AutomationProperties.GetName(updateControl) == "检查更新", "header update icon is enabled and accessible");
+                store.Data.LatestReleaseTag = "v99.0.0";
+                window.RefreshUpdateBadge();
+                Check(((System.Windows.Shapes.Ellipse)window.FindName("UpdateBadge")).Visibility == Visibility.Visible && updateControl.ToolTip.ToString().Contains("99.0.0"), "newer release shows red badge with version tooltip");
+                store.Data.LatestReleaseTag = "v" + BuildVersion.Value;
+                window.RefreshUpdateBadge();
+                Check(((System.Windows.Shapes.Ellipse)window.FindName("UpdateBadge")).Visibility == Visibility.Collapsed, "badge disappears when installed version is current");
                 Check(((Grid)window.Content).Children.Count == 9, "all eight resize edges and corners installed");
                 Check(app.Windows.Count == 1, "only the visible task window remains registered");
                 var dialog = new DailyDialog(window, "检查更新", "现有待办和设置会保留。", "下载并更新", "稍后再说");

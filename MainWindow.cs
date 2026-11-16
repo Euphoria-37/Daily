@@ -123,7 +123,7 @@ namespace DailyTodo
             Closing += OnClosing;
             Loaded += delegate { input.Focus(); };
             dateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-            dateTimer.Tick += async delegate { UpdateDate(); await RefreshQuoteAsync(); };
+            dateTimer.Tick += async delegate { UpdateDate(); await RefreshDailyContentAsync(); };
             dateTimer.Start();
             Closed += delegate { dateTimer.Stop(); };
             tray = new System.Windows.Forms.NotifyIcon { Text = "Daily", Icon = System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location), Visible = true };
@@ -133,7 +133,7 @@ namespace DailyTodo
             tray.DoubleClick += delegate { restore(); };
             var menu = new System.Windows.Forms.ContextMenuStrip();
             menu.Items.Add("显示待办", null, delegate { restore(); });
-            InitializeUpdates(menu);
+            InitializeUpdates(menu, onlineQuotes);
             menu.Items.Add("退出", null, delegate { Close(); });
             tray.ContextMenuStrip = menu;
             Closed += delegate { tray.Visible = false; tray.Icon.Dispose(); tray.Dispose(); menu.Dispose(); };

@@ -10,8 +10,11 @@ namespace DailyTodo
         bool checkingUpdate;
         string pendingUpdate;
 
-        void InitializeUpdates(System.Windows.Forms.ContextMenuStrip menu)
+        void InitializeUpdates(System.Windows.Forms.ContextMenuStrip menu, bool automatic)
         {
+            autoUpdateEnabled = automatic;
+            RefreshUpdateBadge();
+            Loaded += async delegate { await AutoCheckUpdatesAsync(); };
             menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem("Daily v" + BuildVersion.Value) { Enabled = false });
             var check = menu.Items.Add("检查更新…");
             var updateButton = Part<System.Windows.Controls.Button>("UpdateButton");
@@ -28,8 +31,11 @@ namespace DailyTodo
                     ShowWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle, 9);
                     Activate();
                     check.Text = "正在检查更新…";
-                    var release = await UpdateService.GetLatestAsync();
+                    var release = await FetchUpdateAsync();
                     if (quoteClosed) return;
+                    UpdateStatus.Record(store.Data, release, DateTime.Now);
+                    RefreshUpdateBadge();
+                    Save();
                     if (UpdateService.ParseVersion(release.tag_name) <= UpdateService.ParseVersion(BuildVersion.Value))
                     {
                         Inform("检查更新", "当前版本 v" + BuildVersion.Value + " 已是最新，无需更新。");
@@ -57,7 +63,7 @@ namespace DailyTodo
                     if (candidate != null && pendingUpdate == null) UpdateService.DeleteStage(Path.GetDirectoryName(candidate));
                     if (!quoteClosed) {
                         check.Text = "检查更新…"; check.Enabled = true;
-                        updateButton.IsEnabled = true; updateButton.ToolTip = "检查更新";
+                        updateButton.IsEnabled = true; RefreshUpdateBadge();
                         Part<System.Windows.Controls.TextBlock>("SaveLabel").Text = saveFailed ? "保存失败" : "本机自动保存";
                     }
                     checkingUpdate = false;

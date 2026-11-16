@@ -28,6 +28,9 @@ namespace DailyTodo
         public double Height { get; set; }
         public string QuoteText { get; set; }
         public string QuoteDate { get; set; }
+        public string UpdateCheckDate { get; set; }
+        public string UpdateCheckBuild { get; set; }
+        public string LatestReleaseTag { get; set; }
         public TodoData()
         {
             Items = new List<TodoItem>();
