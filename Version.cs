@@ -3,5 +3,5 @@ using System.Reflection;
 [assembly: AssemblyFileVersion(DailyTodo.BuildVersion.Value)]
 namespace DailyTodo
 {
-    public static class BuildVersion { public const string Value = "1.4.3"; }
+    public static class BuildVersion { public const string Value = "1.5.0"; }
 }

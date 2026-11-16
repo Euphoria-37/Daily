@@ -278,6 +278,26 @@ namespace DailyTodo
                 window.Show();
                 window.UpdateLayout();
                 Check(((TextBlock)window.FindName("QuoteLabel")).Text == "每天向前一步。", "main interface displays cached daily quote");
+                var quoteLabel = (TextBlock)window.FindName("QuoteLabel");
+                var onlineField = typeof(MainWindow).GetField("onlineQuotes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                onlineField.SetValue(window, true);
+                var pendingQuote = new System.Threading.Tasks.TaskCompletionSource<string>();
+                int manualRequests = 0;
+                window.quoteFetch = () => { manualRequests++; return pendingQuote.Task; };
+                quoteLabel.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+                    { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+                window.RefreshQuoteAsync(true).GetAwaiter().GetResult();
+                Check(manualRequests == 1 && quoteLabel.Cursor == System.Windows.Input.Cursors.Hand, "quote click starts one request and ignores repeated clicks while busy");
+                pendingQuote.SetResult("点击换一句成功"); Pump(40);
+                Check(quoteLabel.Text == "点击换一句成功" && new TodoStore(store.FilePath).Data.QuoteText == quoteLabel.Text,
+                    "manual quote refresh bypasses daily cache and persists replacement");
+                window.quoteFetch = () => { throw new System.Net.Http.HttpRequestException(); };
+                window.RefreshQuoteAsync(true).GetAwaiter().GetResult();
+                Check(quoteLabel.Text == "点击换一句成功" && quoteLabel.ToolTip.ToString().Contains("重试"), "manual quote failure retains prior text and permits retry");
+                window.quoteFetch = () => System.Threading.Tasks.Task.FromResult("重试成功");
+                window.RefreshQuoteAsync(true).GetAwaiter().GetResult();
+                Check(quoteLabel.Text == "重试成功", "manual quote retry bypasses automatic retry delay");
+                onlineField.SetValue(window, false);
                 Check(!window.ShowInTaskbar, "window excluded from taskbar");
                 var header = (Grid)window.FindName("TitleBar");
                 var pinControl = (FrameworkElement)window.FindName("PinButton");
@@ -491,6 +511,11 @@ namespace DailyTodo
                 }
                 window.UpdateLayout();
                 var scroll = (ScrollViewer)window.FindName("TaskScroller");
+                var mainScrollbar = (System.Windows.Controls.Primitives.ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar", scroll);
+                var mainTrack = (System.Windows.Controls.Primitives.Track)mainScrollbar.Template.FindName("PART_Track", mainScrollbar);
+                var mainPill = (Border)mainTrack.Thumb.Template.FindName("Pill", mainTrack.Thumb);
+                Check(mainPill.ActualWidth == 3 && mainPill.Background.ToString() == "#FF315E4A" && mainScrollbar.ActualWidth == 10,
+                    "main task list shares thin green scrollbar style with update dialogs");
                 Check(scroll.ScrollableHeight > 0 && scroll.ViewportHeight > 0, "many tasks remain scrollable");
                 window.DockTo(-1, new Rect(0, 0, 1920, 1080));
                 window.CollapseDock();
