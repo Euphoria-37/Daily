@@ -14,8 +14,13 @@ namespace DailyTodo
         [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr handle, int command);
 
         [STAThread]
-        public static void Main()
+        public static void Main(string[] args)
         {
+            if (args.Length == 2 && args[0] == "--apply-update")
+            {
+                Environment.ExitCode = UpdateInstaller.Run(args[1]);
+                return;
+            }
             bool created;
             using (var mutex = new Mutex(true, "Local\\DailyTodo.Desktop.v1", out created))
             {
@@ -27,13 +32,14 @@ namespace DailyTodo
                 }
                 try
                 {
+                    try { UpdateService.CleanupStaging(); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                     var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
                     string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DailyTodo", "tasks.xml");
                     app.Run(new MainWindow(new TodoStore(path)));
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(ex.Message, "Daily · 无法启动", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    DailyDialog.Info(null, "无法启动", ex.Message);
                 }
             }
         }

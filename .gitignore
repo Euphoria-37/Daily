@@ -1,2 +1,6 @@
 bin/
 *.exe
+*.exe.previous
+.Daily-*.new
+.Daily-*.tmp
+tasks.xml*

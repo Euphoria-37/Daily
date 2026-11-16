@@ -28,18 +28,157 @@ namespace DailyTodo
             System.Windows.Threading.Dispatcher.PushFrame(frame);
         }
 
+        static void TestUpdates(string root)
+        {
+            Check(UpdateService.ParseVersion("v1.10.0") > UpdateService.ParseVersion("v1.2.0"), "update versions compare numerically");
+            var release = new ReleaseInfo { tag_name = "v1.2.0", assets = new[] {
+                new ReleaseAsset { name = "Daily.exe", state = "uploaded", size = 2048,
+                    browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v1.2.0/Daily.exe",
+                    digest = "sha256:" + new string('0', 64) }
+            }};
+            Check(UpdateService.ValidateRelease(release) == release.assets[0], "only named official release asset accepted");
+            release.assets[0].browser_download_url = "https://example.com/Daily.exe";
+            bool rejected = false;
+            try { UpdateService.ValidateRelease(release); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "foreign update URL rejected");
+            release.assets[0].browser_download_url = "https://github.com/march7th-26/Daily/releases/download/v1.2.0/Daily.exe";
+            release.assets[0].digest = null;
+            rejected = false;
+            try { UpdateService.ValidateRelease(release); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "missing update checksum rejected");
+            release.assets[0].digest = "sha256:" + new string('0', 64);
+            release.prerelease = true;
+            rejected = false;
+            try { UpdateService.ValidateRelease(release); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "prerelease excluded from updates");
+            release.prerelease = false;
+            release.assets[0].size = UpdateService.MaxDownloadSize + 1;
+            rejected = false;
+            try { UpdateService.ValidateRelease(release); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "oversize update rejected");
+
+            string dir = Path.Combine(root, "update-fixture");
+            Directory.CreateDirectory(dir);
+            string candidate = Path.Combine(dir, "candidate.exe");
+            string target = Path.Combine(dir, "Daily.exe");
+            string production = Path.Combine(Path.GetDirectoryName(typeof(Tests).Assembly.Location), "DailyTodo.exe");
+            File.Copy(production, candidate);
+            File.Copy(production, target);
+            File.AppendAllText(target, "previous-build-marker");
+            byte[] original = File.ReadAllBytes(target);
+            var data = new TodoStore(Path.Combine(dir, "tasks.xml"));
+            data.Add("保留历史待办");
+            data.Toggle(data.Data.Items[0].Id);
+            data.Save();
+            string history = File.ReadAllText(data.FilePath);
+            var asset = release.assets[0];
+            asset.size = new FileInfo(candidate).Length;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            using (var stream = File.OpenRead(candidate))
+                asset.digest = "sha256:" + BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+            var version = UpdateService.ParseVersion(BuildVersion.Value);
+            UpdateService.VerifyFile(candidate, asset, version);
+            Check(true, "download verified against hash and executable version");
+            rejected = false;
+            try { UpdateService.VerifyFile(candidate, asset, new Version(99, 0, 0, 0)); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "incorrect executable version rejected");
+            int launches = 0;
+            UpdateInstaller.ReplaceAndRestart(target, candidate, asset, version, path => { if (path == target) launches++; });
+            Check(launches == 1 && File.ReadAllBytes(target).Length == asset.size && File.ReadAllBytes(target + ".previous").Length == original.Length,
+                "update atomically replaces executable and retains previous build");
+            Check(File.ReadAllText(data.FilePath) == history && new TodoStore(data.FilePath).Data.Items[0].Done, "update preserves history and completed state byte for byte");
+            File.Copy(target + ".previous", target, true);
+            bool failed = false;
+            try { UpdateInstaller.ReplaceAndRestart(target, candidate, asset, version, path => { throw new IOException("simulated launch failure"); }); }
+            catch (IOException) { failed = true; }
+            Check(failed && Convert.ToBase64String(File.ReadAllBytes(target)) == Convert.ToBase64String(original), "failed restart rolls back previous executable");
+            Check(File.ReadAllText(data.FilePath) == history, "rollback leaves all task data unchanged");
+            File.AppendAllText(candidate, "corrupted");
+            rejected = false;
+            try { UpdateInstaller.ReplaceAndRestart(target, candidate, asset, version, path => { launches++; }); } catch (InvalidDataException) { rejected = true; }
+            Check(rejected && Convert.ToBase64String(File.ReadAllBytes(target)) == Convert.ToBase64String(original), "corrupt payload cannot replace existing app");
+
+            string stage = Path.Combine(UpdateService.StagingRoot, Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stage);
+            try
+            {
+                string fixture = Path.Combine(Path.GetDirectoryName(production), "update-fixture", "DailyTodo.exe");
+                string helper = Path.Combine(stage, "helper.exe");
+                File.Copy(production, helper);
+                File.Copy(fixture, Path.Combine(stage, "candidate.exe"));
+                File.Copy(fixture, target, true);
+                File.AppendAllText(target, "previous-integration-build");
+                asset.size = new FileInfo(fixture).Length;
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                using (var stream = File.OpenRead(fixture))
+                    asset.digest = "sha256:" + BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                var job = new UpdateJob { Target = target, Tag = "v" + BuildVersion.Value, Asset = asset,
+                    SourcePid = int.MaxValue, SourceStarted = 1 };
+                string jobPath = Path.Combine(stage, "job.json");
+                File.WriteAllText(jobPath, new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(job));
+                using (var worker = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(helper, "--apply-update \"" + jobPath + "\"")
+                    { UseShellExecute = false, CreateNoWindow = true, WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden }))
+                {
+                    if (!worker.WaitForExit(10000)) { worker.Kill(); worker.WaitForExit(); throw new Exception("Update helper timed out"); }
+                    Check(worker.ExitCode == 0, "standalone update helper replaces and relaunches app");
+                }
+                string marker = Path.Combine(dir, "update-started.txt");
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (!File.Exists(marker) && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(25);
+                Check(File.Exists(marker), "replacement executable starts successfully");
+                Check(File.ReadAllText(data.FilePath) == history, "full helper update preserves existing task data");
+            }
+            finally { UpdateService.DeleteStage(stage); }
+        }
+
+        static void TestHistory(string root)
+        {
+            var history = new TodoStore(Path.Combine(root, "history", "tasks.xml"));
+            history.Add("归档测试");
+            var item = history.Data.Items[0];
+            var created = item.CreatedAt;
+            Check(created.HasValue && created.Value.Kind == DateTimeKind.Utc, "new item records UTC creation time");
+            history.Toggle(item.Id);
+            var completed = item.CompletedAt;
+            Check(completed.HasValue && item.Done, "completion records completion time");
+            history.Edit(item.Id, "归档前修改");
+            Check(item.CreatedAt == created && item.CompletedAt == completed, "editing preserves creation and completion timestamps");
+            Check(history.Archive(item.Id) && item.ArchivedAt.HasValue && item.Done && history.Data.Items.Count == 1, "archive moves state without duplication or deletion");
+            Check(!history.Archive(item.Id), "repeat archive is ignored");
+            history.Save();
+            history = new TodoStore(history.FilePath);
+            item = history.Data.Items[0];
+            Check(item.Archived && item.CreatedAt == created && item.CompletedAt == completed && item.ArchivedAt.HasValue, "archive and all timestamps survive restart");
+            Check(history.Restore(item.Id) && !item.Archived && item.ArchivedAt == null && item.Done && item.CreatedAt == created && item.CompletedAt == completed, "restore preserves task state and original times");
+            history.Toggle(item.Id);
+            Check(!item.Done && item.CompletedAt == null, "undo completion clears completion time");
+            Check(history.Archive(item.Id) && !item.Done && item.CompletedAt == null, "unfinished task can be archived");
+            history.Delete(item.Id);
+            Check(history.Data.Items.Count == 0, "delete removes archived record");
+            string legacy = Path.Combine(root, "legacy.xml");
+            File.WriteAllText(legacy, "<TodoData><Items><TodoItem><Id>legacy-id</Id><Text>旧事项</Text><Done>true</Done></TodoItem></Items></TodoData>");
+            var old = new TodoStore(legacy);
+            Check(old.Data.Items[0].Done && old.Data.Items[0].CreatedAt == null && old.Data.Items[0].CompletedAt == null && !old.Data.Items[0].Archived,
+                "legacy tasks keep content and do not fabricate dates");
+            Check(HistoryWindow.TimeLabel(null) == "未记录", "missing historical dates have an explicit label");
+        }
+
         [STAThread]
         public static int Main()
         {
             string dir = Path.Combine(Path.GetTempPath(), "DailyTodo-test-" + Guid.NewGuid());
             try
             {
+                TestUpdates(dir);
+                TestHistory(dir);
                 var store = new TodoStore(Path.Combine(dir, "tasks.xml"));
                 Check(!store.Add(" \r\n "), "blank task rejected");
                 Check(store.Add("  中文事项 <test> & emoji 🎉  "), "unicode task accepted");
                 Check(store.Data.Items[0].Text == "中文事项 <test> & emoji 🎉", "text trimmed");
                 Check(!store.Add(new string('x', 201)), "length limit enforced");
                 string id = store.Data.Items[0].Id;
+                Check(store.Edit(id, "  修正后的事项 <test> &  ") && store.Data.Items[0].Id == id && store.Data.Items.Count == 1, "edit replaces existing item without changing identity");
+                Check(!store.Edit(id, "  ") && !store.Edit(id, new string('x', 201)), "invalid edits preserve original text");
                 store.Toggle(id);
                 Check(store.Data.Items[0].Done, "completion enabled");
                 store.Save();
@@ -79,18 +218,83 @@ namespace DailyTodo
                 window.UpdateLayout();
                 Check(((TextBlock)window.FindName("QuoteLabel")).Text == "每天向前一步。", "main interface displays cached daily quote");
                 Check(!window.ShowInTaskbar, "window excluded from taskbar");
+                var header = (Grid)window.FindName("TitleBar");
+                var pinControl = (FrameworkElement)window.FindName("PinButton");
+                var updateControl = (Button)window.FindName("UpdateButton");
+                var minimizeControl = (FrameworkElement)window.FindName("MinimizeButton");
+                var closeControl = (FrameworkElement)window.FindName("CloseButton");
+                Check(pinControl.TransformToAncestor(header).Transform(new Point()).X < updateControl.TransformToAncestor(header).Transform(new Point()).X
+                    && updateControl.TransformToAncestor(header).Transform(new Point()).X < minimizeControl.TransformToAncestor(header).Transform(new Point()).X
+                    && minimizeControl.TransformToAncestor(header).Transform(new Point()).X < closeControl.TransformToAncestor(header).Transform(new Point()).X,
+                    "header places pin and update left, minimize and close right");
+                Check(updateControl.IsEnabled && System.Windows.Automation.AutomationProperties.GetName(updateControl) == "检查更新", "header update icon is enabled and accessible");
                 Check(((Grid)window.Content).Children.Count == 9, "all eight resize edges and corners installed");
                 Check(app.Windows.Count == 1, "only the visible task window remains registered");
+                var dialog = new DailyDialog(window, "检查更新", "现有待办和设置会保留。", "下载并更新", "稍后再说");
+                Check(dialog.Shell.CornerRadius.TopLeft == 20 && dialog.Shell.Background.ToString() == "#FFFCFBF8" && !dialog.ShowInTaskbar, "update dialog shares rounded cream theme and hides from taskbar");
+                window.Dispatcher.BeginInvoke(new Action(delegate { dialog.AcceptButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
+                Check(dialog.ShowDialog() == true, "themed confirmation returns affirmative choice");
+                var cancelDialog = new DailyDialog(window, "删除记录", "确认后删除。", "删除", "保留");
+                window.Dispatcher.BeginInvoke(new Action(delegate { cancelDialog.CancelButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
+                Check(cancelDialog.ShowDialog() == false, "themed cancel preserves negative choice");
+                bool openedHistory = false;
+                window.Dispatcher.BeginInvoke(new Action(delegate {
+                    foreach (Window child in window.OwnedWindows) if (child is HistoryWindow) { openedHistory = true; child.Close(); break; }
+                }));
+                ((Button)window.FindName("HistoryButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(openedHistory, "history icon opens themed history window");
+                var tray = (System.Windows.Forms.NotifyIcon)typeof(MainWindow).GetField("tray", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(window);
+                Check(System.Linq.Enumerable.Any(System.Linq.Enumerable.Cast<System.Windows.Forms.ToolStripItem>(tray.ContextMenuStrip.Items), i => i.Text == "检查更新…"), "tray exposes update command");
                 var input = (TextBox)window.FindName("TaskInput");
                 input.Text = "界面添加测试";
                 ((Button)window.FindName("AddButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(store.Data.Items.Count == 1 && input.Text == "", "add through actual button");
                 var rows = (StackPanel)window.FindName("TaskRows");
                 var grid = (Grid)((Border)rows.Children[0]).Child;
+                input.Focus(); Pump(20);
+                Check(((Button)grid.Children[2]).Opacity == (grid.IsMouseOver ? 1 : 0), "row actions follow actual mouse hover while input is focused");
+                ((System.Windows.Controls.Primitives.ToggleButton)grid.Children[0]).Focus(); Pump(20);
+                Check(((Button)grid.Children[2]).Opacity == 1 && ((Button)grid.Children[4]).Opacity == 1, "keyboard focus reveals both archive and delete actions");
                 ((System.Windows.Controls.Primitives.ToggleButton)grid.Children[0]).IsChecked = true;
                 Check(store.Data.Items[0].Done, "circle toggles actual task");
                 ((System.Windows.Controls.Primitives.ToggleButton)grid.Children[0]).IsChecked = false;
                 Check(!store.Data.Items[0].Done, "circle reverses actual task");
+                var source = PresentationSource.FromVisual(window);
+                var circleButton = (System.Windows.Controls.Primitives.ToggleButton)grid.Children[0];
+                circleButton.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.F2) { RoutedEvent = UIElement.KeyDownEvent });
+                var editor = (TextBox)grid.Children[3];
+                Check(editor.Visibility == Visibility.Visible, "row enters inline editing");
+                editor.ApplyTemplate();
+                Check(((Border)editor.Template.FindName("EditorChrome", editor)).CornerRadius.TopLeft == 10
+                    && editor.Template.FindName("PART_ContentHost", editor) != null, "inline editor has rounded border and functional text host");
+                editor.Text = "修改后的界面事项";
+                editor.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Enter) { RoutedEvent = UIElement.KeyDownEvent });
+                Check(store.Data.Items[0].Text == "修改后的界面事项" && store.Data.Items.Count == 1 && !store.Data.Items[0].Done, "Enter saves edit without adding or completing item");
+                circleButton.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.F2) { RoutedEvent = UIElement.KeyDownEvent });
+                editor.Text = "不应保存";
+                editor.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape) { RoutedEvent = UIElement.KeyDownEvent });
+                Check(store.Data.Items[0].Text == "修改后的界面事项" && new TodoStore(store.FilePath).Data.Items[0].Text == "修改后的界面事项", "Escape cancels and saved edit survives restart");
+                Check(window.SaveBeforeUpdate() && new TodoStore(store.FilePath + ".update.bak").Data.Items[0].Text == "修改后的界面事项", "update backup contains current edited task");
+                File.Delete(store.FilePath + ".update.bak");
+                Directory.CreateDirectory(store.FilePath + ".update.bak");
+                Check(!window.SaveBeforeUpdate(), "backup failure blocks update");
+                Directory.Delete(store.FilePath + ".update.bak");
+                var archiveAction = (Button)grid.Children[4];
+                Check(archiveAction.Style == (Style)window.Resources["RowActionStyle"] && ((Button)grid.Children[2]).Style == archiveAction.Style, "archive and delete share hover and keyboard-focus visibility style");
+                archiveAction.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(store.Data.Items.Count == 1 && store.Data.Items[0].Archived && rows.Children.Count == 0, "archive button removes item from active list without deleting it");
+                var historyWindow = new HistoryWindow(window, store, delegate { window.RenderTasks(); store.Save(); });
+                historyWindow.Show();
+                historyWindow.UpdateLayout();
+                Check(historyWindow.Shell.CornerRadius.TopLeft == 20 && historyWindow.Records.Children[0] is Border, "history window and record cards use shared rounded theme");
+                var recordCard = (Border)historyWindow.Records.Children[0];
+                var recordContent = (StackPanel)recordCard.Child;
+                Check(recordCard.CornerRadius.TopLeft == 12 && ((TextBlock)recordContent.Children[1]).Text.Contains("创建") && ((TextBlock)recordContent.Children[1]).Text.Contains("未完成"), "history displays creation and completion status");
+                var historyActions = (StackPanel)recordContent.Children[2];
+                ((Button)historyActions.Children[0]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(!store.Data.Items[0].Archived && rows.Children.Count == 1 && historyWindow.Records.Children[0] is TextBlock, "history restore button returns item and updates both views");
+                historyWindow.Close();
+                grid = (Grid)((Border)rows.Children[0]).Child;
                 ((Button)grid.Children[2]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(store.Data.Items.Count == 0 && rows.Children.Count == 0, "delete through actual row button");
                 input.Text = new string('长', 200);
@@ -153,30 +357,49 @@ namespace DailyTodo
                     window.UpdateDockHover(outside, true, tick.AddSeconds(5));
                     window.UpdateDockHover(outside, true, tick.AddSeconds(6));
                     Check(!window.DockCollapsed, "mouse drag does not collapse panel " + side);
+                    var checkingField = typeof(MainWindow).GetField("checkingUpdate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    checkingField.SetValue(window, true);
+                    try
+                    {
+                        window.UpdateDockHover(outside, false, tick.AddSeconds(8));
+                        window.UpdateDockHover(outside, false, tick.AddSeconds(9));
+                        Check(!window.DockCollapsed, "update prompt keeps panel expanded " + side);
+                    }
+                    finally { checkingField.SetValue(window, false); }
                 }
                 var originalCursor = System.Windows.Forms.Cursor.Position;
                 try
                 {
+                    // Synthetic geometry tests above queue native window moves.
+                    // Drain those moves before deriving the physical screen origin.
+                    var updateFlag = typeof(MainWindow).GetField("checkingUpdate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    updateFlag.SetValue(window, true);
+                    Pump(75);
                     var screen = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(window).Handle).WorkingArea;
                     var origin = window.PointFromScreen(new Point(screen.Left, screen.Top));
                     var end = window.PointFromScreen(new Point(screen.Right, screen.Bottom));
                     var area = new Rect(origin.X + window.Left, origin.Y + window.Top, end.X - origin.X, end.Y - origin.Y);
+                    updateFlag.SetValue(window, false);
                     foreach (int side in new[] { -1, 1, 2 })
                     {
                         System.Windows.Forms.Cursor.Position = new System.Drawing.Point(screen.Left + screen.Width / 2, screen.Bottom - 30);
                         window.DockTo(side, area);
                         window.CollapseDock();
                         window.UpdateLayout();
+                        // Let the native transparent HWND catch up before PointToScreen.
+                        Pump(75);
                         var target = window.PointToScreen(new Point(side == -1 ? 1 : side == 1 ? window.Width - 1 : window.Width / 2,
                             side == 2 ? 1 : window.Height / 2));
                         System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)target.X, (int)target.Y);
                         Pump(150);
+                        if (window.DockCollapsed) Console.WriteLine("Hover diagnostic: side=" + side + " target=" + target + " actual=" + System.Windows.Forms.Cursor.Position + " window=" + new Rect(window.Left, window.Top, window.Width, window.Height));
                         Check(!window.DockCollapsed, "real cursor and timer expand edge " + side);
                         bool collapsedWhileHovering = false;
                         SizeChangedEventHandler observe = delegate { if (window.DockCollapsed) collapsedWhileHovering = true; };
                         window.SizeChanged += observe;
                         Pump(850);
                         window.SizeChanged -= observe;
+                        if (window.DockCollapsed || collapsedWhileHovering) Console.WriteLine("Hover diagnostic: side=" + side + " target=" + target + " actual=" + System.Windows.Forms.Cursor.Position + " window=" + new Rect(window.Left, window.Top, window.Width, window.Height));
                         Check(!window.DockCollapsed && !collapsedWhileHovering, "real stationary hover has no collapse transitions " + side);
                         System.Windows.Forms.Cursor.Position = new System.Drawing.Point(screen.Left + screen.Width / 2, screen.Bottom - 30);
                         Pump(400);

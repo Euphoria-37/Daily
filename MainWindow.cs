@@ -22,6 +22,7 @@ namespace DailyTodo
         readonly ToggleButton pin;
         readonly DispatcherTimer dateTimer;
         bool saveFailed;
+        Action finishActiveEdit;
         System.Windows.Forms.NotifyIcon tray;
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
@@ -115,6 +116,7 @@ namespace DailyTodo
                 if (e.ButtonState == MouseButtonState.Pressed) { Undock(); DragMove(); TryDock(); }
             };
             Part<Button>("AddButton").Click += delegate { AddTask(); };
+            Part<Button>("HistoryButton").Click += delegate { ShowHistory(); };
             input.TextChanged += delegate { Part<TextBlock>("InputHint").Visibility = input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; };
             input.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { AddTask(); e.Handled = true; } };
             PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control) { input.Focus(); e.Handled = true; } };
@@ -131,6 +133,7 @@ namespace DailyTodo
             tray.DoubleClick += delegate { restore(); };
             var menu = new System.Windows.Forms.ContextMenuStrip();
             menu.Items.Add("显示待办", null, delegate { restore(); });
+            InitializeUpdates(menu);
             menu.Items.Add("退出", null, delegate { Close(); });
             tray.ContextMenuStrip = menu;
             Closed += delegate { tray.Visible = false; tray.Icon.Dispose(); tray.Dispose(); menu.Dispose(); };
@@ -168,14 +171,16 @@ namespace DailyTodo
             input.Focus();
         }
 
-        void RenderTasks()
+        internal void RenderTasks()
         {
+            if (finishActiveEdit != null) finishActiveEdit();
             rows.Children.Clear();
-            foreach (var item in store.Data.Items)
+            foreach (var item in store.Data.Items.Where(t => !t.Archived))
             {
-                var row = new Grid { Margin = new Thickness(0, 5, 0, 5) };
+                var row = new Grid { Margin = new Thickness(0, 5, 0, 5), Background = Brushes.Transparent };
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
                 var circle = new ToggleButton { Style = (Style)Resources["CircleStyle"], IsChecked = item.Done, VerticalAlignment = VerticalAlignment.Top };
                 AutomationProperties.SetName(circle, "完成状态：" + item.Text);
@@ -198,22 +203,72 @@ namespace DailyTodo
                 circle.Checked += toggle;
                 circle.Unchecked += toggle;
                 var delete = new Button { Content = "×", FontSize = 17, Padding = new Thickness(0), Width = 26, Height = 30, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 3, 0, 0), ToolTip = "删除事项" };
+                delete.Style = (Style)Resources["RowActionStyle"];
                 AutomationProperties.SetName(delete, "删除：" + item.Text);
-                Grid.SetColumn(delete, 2);
+                Grid.SetColumn(delete, 3);
                 delete.Click += delegate { store.Delete(item.Id); RenderTasks(); Save(); input.Focus(); };
                 row.Children.Add(circle);
                 row.Children.Add(label);
                 row.Children.Add(delete);
+                var editor = new TextBox { Text = item.Text, MaxLength = 200, TextWrapping = TextWrapping.Wrap,
+                    FontSize = 13, Margin = new Thickness(3, 3, 3, 3), Style = (Style)Resources["InlineEditStyle"],
+                    VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed,
+                    Foreground = Foreground };
+                Grid.SetColumn(editor, 1);
+                AutomationProperties.SetName(editor, "编辑待办事项");
+                Button archive = null;
+                label.ToolTip = "双击编辑 · Enter 保存 · Esc 取消";
+                Action<bool> finish = delegate(bool save) {
+                    if (editor.Visibility != Visibility.Visible) return;
+                    finishActiveEdit = null;
+                    if (save && store.Edit(item.Id, editor.Text)) Save();
+                    label.Text = item.Text;
+                    editor.Visibility = Visibility.Collapsed;
+                    label.Visibility = Visibility.Visible;
+                    AutomationProperties.SetName(circle, "完成状态：" + item.Text);
+                    AutomationProperties.SetName(delete, "删除：" + item.Text);
+                    if (archive != null) AutomationProperties.SetName(archive, "归档：" + item.Text);
+                };
+                Action begin = delegate {
+                    if (finishActiveEdit != null) finishActiveEdit();
+                    editor.Text = item.Text;
+                    label.Visibility = Visibility.Collapsed;
+                    editor.Visibility = Visibility.Visible;
+                    finishActiveEdit = delegate { finish(true); };
+                    editor.Focus();
+                    editor.SelectAll();
+                };
+                label.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) {
+                    if (e.ClickCount == 2) { begin(); e.Handled = true; }
+                };
+                circle.KeyDown += delegate(object sender, KeyEventArgs e) {
+                    if (e.Key == Key.F2) { begin(); e.Handled = true; }
+                };
+                editor.KeyDown += delegate(object sender, KeyEventArgs e) {
+                    if (e.Key == Key.Enter || e.Key == Key.Escape) {
+                        finish(e.Key == Key.Enter); circle.Focus(); e.Handled = true;
+                    }
+                };
+                editor.LostKeyboardFocus += delegate { finish(true); };
+                row.Children.Add(editor);
+                archive = new Button { Style = (Style)Resources["RowActionStyle"], Width = 26, Height = 30, Padding = new Thickness(0),
+                    Margin = new Thickness(0, 3, 0, 0), VerticalAlignment = VerticalAlignment.Top, ToolTip = "归档到历史记录",
+                    Content = new System.Windows.Shapes.Path { Width = 15, Height = 15, Stretch = Stretch.Uniform,
+                        Data = Geometry.Parse("M 1,2 L 17,2 L 17,6 L 1,6 Z M 3,6 L 3,17 L 15,17 L 15,6 M 7,10 L 11,10"), Stroke = ThemedWindow.Color("#62746A"), StrokeThickness = 1.5 } };
+                Grid.SetColumn(archive, 2);
+                AutomationProperties.SetName(archive, "归档：" + item.Text);
+                archive.Click += delegate { if (finishActiveEdit != null) finishActiveEdit(); store.Archive(item.Id); RenderTasks(); Save(); input.Focus(); };
+                row.Children.Add(archive);
                 rows.Children.Add(new Border { Child = row, BorderBrush = (Brush)new BrushConverter().ConvertFromString("#ECEEE7"), BorderThickness = new Thickness(0, 0, 0, 1) });
             }
-            Part<StackPanel>("EmptyState").Visibility = store.Data.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            Part<StackPanel>("EmptyState").Visibility = rows.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             UpdateProgress();
         }
 
         void UpdateProgress()
         {
-            int total = store.Data.Items.Count;
-            int done = store.Data.Items.Count(t => t.Done);
+            int total = store.Data.Items.Count(t => !t.Archived);
+            int done = store.Data.Items.Count(t => !t.Archived && t.Done);
             Part<TextBlock>("ProgressLabel").Text = total == 0 ? "今日，从容开始" : done == total ? "全部完成，做得很好！" : "已完成 " + done + " / " + total;
             Part<ProgressBar>("Progress").Value = total == 0 ? 0 : (double)done / total;
         }
@@ -240,14 +295,20 @@ namespace DailyTodo
 
         void OnClosing(object sender, CancelEventArgs e)
         {
+            if (finishActiveEdit != null) finishActiveEdit();
             ExpandDock();
             store.Data.Left = Left;
             store.Data.Top = Top;
             store.Data.Width = Width;
             store.Data.Height = Height;
             Save();
-            if (saveFailed && MessageBox.Show(this, "当前更改未能保存。仍要退出吗？\n数据位置：" + store.FilePath,
-                "每日待办", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) e.Cancel = true;
+            if (pendingUpdate != null && !SaveBeforeUpdate())
+            {
+                e.Cancel = true;
+                Inform("更新已取消", "待办数据未能保存或备份，已取消更新。请检查数据目录权限。");
+                return;
+            }
+            if (saveFailed && !Confirm("更改尚未保存", "当前更改未能保存。仍要退出吗？\n数据位置：" + store.FilePath, "退出", "继续编辑")) e.Cancel = true;
         }
     }
 }

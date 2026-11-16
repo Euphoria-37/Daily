@@ -50,6 +50,7 @@ namespace DailyTodo
 
         internal void UpdateDockHover(Point pointer, bool dragging, DateTime now)
         {
+            if (checkingUpdate || modalDepth > 0) { pointerOutsideSince = null; return; }
             if (dockSide == 0) return;
             // Rounded corners and transparent shadow margins can produce MouseLeave
             // without the pointer actually leaving the panel or its original strip.

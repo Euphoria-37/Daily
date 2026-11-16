@@ -6,6 +6,24 @@
         Foreground="#293831" WindowStartupLocation="CenterScreen">
   <Window.Resources>
     <SolidColorBrush x:Key="Accent" Color="#3F7059"/>
+    <Style x:Key="InlineEditStyle" TargetType="TextBox">
+      <Setter Property="Background" Value="#F0F2EC"/>
+      <Setter Property="BorderBrush" Value="#D5DED2"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="CaretBrush" Value="#3F7059"/>
+      <Setter Property="SelectionBrush" Value="#ABC8B3"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
+        <Border x:Name="EditorChrome" CornerRadius="10" Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+          <ScrollViewer x:Name="PART_ContentHost" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="EditorChrome" Property="BorderBrush" Value="#3F7059"/><Setter TargetName="EditorChrome" Property="Background" Value="#F7FAF4"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Background" Value="Transparent"/>
@@ -21,9 +39,17 @@
             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Opacity" Value="0.7"/></Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#3F7059"/><Setter TargetName="Chrome" Property="BorderThickness" Value="1"/></Trigger>
             <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Opacity" Value="0.5"/></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.35"/></Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate></Setter.Value>
       </Setter>
+    </Style>
+    <Style x:Key="RowActionStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Opacity" Value="0"/><Setter Property="IsHitTestVisible" Value="False"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Grid}}" Value="True"><Setter Property="Opacity" Value="1"/><Setter Property="IsHitTestVisible" Value="True"/></DataTrigger>
+        <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=Grid}}" Value="True"><Setter Property="Opacity" Value="1"/><Setter Property="IsHitTestVisible" Value="True"/></DataTrigger>
+      </Style.Triggers>
     </Style>
     <Style x:Key="CircleStyle" TargetType="ToggleButton">
       <Setter Property="Width" Value="36"/><Setter Property="Height" Value="36"/>
@@ -65,11 +91,19 @@
       <Grid x:Name="TitleBar" Background="Transparent" Margin="-8,0,-8,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Button x:Name="CloseButton" Width="24" Height="28" Padding="0" ToolTip="关闭" AutomationProperties.Name="关闭窗口"><Ellipse Width="12" Height="12" Fill="#EF8277" Stroke="#DC7268" StrokeThickness="0.7"/></Button>
-          <Button x:Name="MinimizeButton" Width="24" Height="28" Padding="0" ToolTip="最小化" AutomationProperties.Name="最小化窗口"><Ellipse Width="12" Height="12" Fill="#EAC16B" Stroke="#D9AD55" StrokeThickness="0.7"/></Button>
+          <ToggleButton x:Name="PinButton" Style="{StaticResource PinStyle}" AutomationProperties.Name="窗口置顶"/>
+          <Button x:Name="UpdateButton" Width="36" Height="32" Padding="0" ToolTip="检查更新" AutomationProperties.Name="检查更新">
+            <Path Width="17" Height="17" Stretch="Uniform" Data="M 16,6 A 7,7 0 1 0 16,12 M 16,1 L 16,6 L 11,6" Stroke="#62746A" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+          </Button>
+          <Button x:Name="HistoryButton" Width="36" Height="32" Padding="0" ToolTip="历史记录" AutomationProperties.Name="历史记录">
+            <Path Width="17" Height="17" Stretch="Uniform" Data="M 9,1 A 8,8 0 1 1 9,17 A 8,8 0 1 1 9,1 Z M 9,4 L 9,9 L 12,11" Stroke="#62746A" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+          </Button>
         </StackPanel>
         <TextBlock Grid.Column="1" Text="DAILY" FontSize="10" FontWeight="SemiBold" Foreground="#6F7A71" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
-        <ToggleButton x:Name="PinButton" Grid.Column="2" Style="{StaticResource PinStyle}" AutomationProperties.Name="窗口置顶"/>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="MinimizeButton" Width="36" Height="32" Padding="0" ToolTip="收起到托盘" AutomationProperties.Name="最小化窗口"><Path Data="M 0,0 L 12,0" Stroke="#62746A" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Button>
+          <Button x:Name="CloseButton" Width="36" Height="32" Padding="0" ToolTip="退出 Daily" AutomationProperties.Name="关闭窗口"><Path Data="M 0,0 L 10,10 M 10,0 L 0,10" Stroke="#93665E" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Button>
+        </StackPanel>
       </Grid>
       <StackPanel Grid.Row="1" Margin="0,18,0,20">
         <TextBlock x:Name="DateLabel" FontSize="12" Foreground="#67756C" Margin="0,0,0,7"/>

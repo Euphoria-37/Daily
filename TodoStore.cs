@@ -12,6 +12,10 @@ namespace DailyTodo
         public string Id { get; set; }
         public string Text { get; set; }
         public bool Done { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public DateTime? ArchivedAt { get; set; }
+        public bool Archived { get; set; }
     }
 
     public class TodoData
@@ -63,15 +67,44 @@ namespace DailyTodo
         public bool Add(string text)
         {
             if (string.IsNullOrWhiteSpace(text) || text.Trim().Length > 200) return false;
-            Data.Items.Add(new TodoItem { Id = Guid.NewGuid().ToString("N"), Text = text.Trim(), Done = false });
+            Data.Items.Add(new TodoItem { Id = Guid.NewGuid().ToString("N"), Text = text.Trim(), Done = false, CreatedAt = DateTime.UtcNow });
             return true;
         }
         public void Toggle(string id)
         {
             var item = Data.Items.Find(t => t.Id == id);
-            if (item != null) item.Done = !item.Done;
+            if (item != null && !item.Archived)
+            {
+                item.Done = !item.Done;
+                item.CompletedAt = item.Done ? (DateTime?)DateTime.UtcNow : null;
+            }
+        }
+        public bool Edit(string id, string text)
+        {
+            var item = Data.Items.Find(t => t.Id == id);
+            if (item == null || item.Archived || string.IsNullOrWhiteSpace(text) || text.Trim().Length > 200) return false;
+            item.Text = text.Trim();
+            return true;
         }
         public void Delete(string id) { Data.Items.RemoveAll(t => t.Id == id); }
+
+        public bool Archive(string id)
+        {
+            var item = Data.Items.Find(t => t.Id == id);
+            if (item == null || item.Archived) return false;
+            item.Archived = true;
+            item.ArchivedAt = DateTime.UtcNow;
+            return true;
+        }
+
+        public bool Restore(string id)
+        {
+            var item = Data.Items.Find(t => t.Id == id);
+            if (item == null || !item.Archived) return false;
+            item.Archived = false;
+            item.ArchivedAt = null;
+            return true;
+        }
 
         public void Save()
         {
