@@ -291,11 +291,18 @@ namespace DailyTodo
                 Check(((System.Windows.Shapes.Ellipse)window.FindName("UpdateBadge")).Visibility == Visibility.Collapsed, "badge disappears when installed version is current");
                 Check(((Grid)window.Content).Children.Count == 9, "all eight resize edges and corners installed");
                 Check(app.Windows.Count == 1, "only the visible task window remains registered");
-                var dialog = new DailyDialog(window, "检查更新", "现有待办和设置会保留。", "下载并更新", "稍后再说");
+                var dialog = new DailyDialog(window, "检查更新", "现有待办和设置会保留。", "下载并更新", "稍后再说", true);
+                var feedbackContent = (StackPanel)dialog.FeedbackButton.Content;
+                Check(dialog.FeedbackButton.ToolTip.ToString() == DailyDialog.FeedbackUrl
+                    && DailyDialog.FeedbackUrl == "https://github.com/march7th-26/Daily/issues"
+                    && feedbackContent.Children[0] is System.Windows.Shapes.Path && ((TextBlock)feedbackContent.Children[1]).Text == "用户反馈",
+                    "update dialog includes vector GitHub icon and user feedback link");
                 Check(dialog.Shell.CornerRadius.TopLeft == 20 && dialog.Shell.Background.ToString() == "#FFFCFBF8" && !dialog.ShowInTaskbar, "update dialog shares rounded cream theme and hides from taskbar");
                 window.Dispatcher.BeginInvoke(new Action(delegate { dialog.AcceptButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
                 Check(dialog.ShowDialog() == true, "themed confirmation returns affirmative choice");
                 var cancelDialog = new DailyDialog(window, "删除记录", "确认后删除。", "删除", "保留");
+                Check(cancelDialog.FeedbackButton == null && dialog.Height == cancelDialog.Height + 40,
+                    "feedback footer has dedicated space and is limited to opted-in dialogs");
                 window.Dispatcher.BeginInvoke(new Action(delegate { cancelDialog.CancelButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }));
                 Check(cancelDialog.ShowDialog() == false, "themed cancel preserves negative choice");
                 bool openedHistory = false;

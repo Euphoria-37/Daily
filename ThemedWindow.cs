@@ -72,7 +72,9 @@ namespace DailyTodo
     {
         internal readonly Button AcceptButton;
         internal readonly Button CancelButton;
-        public DailyDialog(Window owner, string title, string message, string accept, string cancel)
+        internal readonly Button FeedbackButton;
+        internal const string FeedbackUrl = "https://github.com/march7th-26/Daily/issues";
+        public DailyDialog(Window owner, string title, string message, string accept, string cancel, bool feedback = false)
             : base(owner, title, 440, 300)
         {
             Body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -84,9 +86,33 @@ namespace DailyTodo
             AcceptButton = Button(accept, accept); AcceptButton.Background = Color("#3F7059"); AcceptButton.Foreground = Brushes.White;
             AcceptButton.IsDefault = true; AcceptButton.Click += delegate { DialogResult = true; };
             buttons.Children.Add(AcceptButton); Grid.SetRow(buttons, 1); Body.Children.Add(buttons);
+            if (feedback)
+            {
+                Height += 40;
+                Body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var content = new StackPanel { Orientation = Orientation.Horizontal };
+                content.Children.Add(new System.Windows.Shapes.Path { Width = 17, Height = 17, Stretch = Stretch.Uniform,
+                    Stroke = Color("#62746A"), StrokeThickness = 1.7, StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                    Data = Geometry.Parse("M 9,19 C 4,20 4,16 2,16 M 15,22 L 15,18 C 15,17 14.7,16.3 14,16 C 19,15.5 21,13 21,9 C 21,7 20,6 19,5 C 19.4,4 19.4,2.5 19,2 C 17,2 15,3 14,4 C 12.5,3.6 11.5,3.6 10,4 C 9,3 7,2 5,2 C 4.6,2.5 4.6,4 5,5 C 4,6 3,7 3,9 C 3,13 5,15.5 10,16 C 9.3,16.3 9,17 9,18 L 9,22") });
+                var text = new TextBlock { Text = "用户反馈", Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+                content.Children.Add(text);
+                FeedbackButton = Button("", "用户反馈 · GitHub");
+                FeedbackButton.Content = content; FeedbackButton.Background = Brushes.Transparent;
+                FeedbackButton.Foreground = Color("#62746A"); FeedbackButton.Padding = new Thickness(8, 4, 8, 4);
+                FeedbackButton.HorizontalAlignment = HorizontalAlignment.Left; FeedbackButton.Margin = new Thickness(-8, 8, 0, 0);
+                FeedbackButton.ToolTip = FeedbackUrl;
+                FeedbackButton.Click += delegate {
+                    try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(FeedbackUrl) { UseShellExecute = true }); }
+                    catch (Exception ex) {
+                        if (!(ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException || ex is System.IO.FileNotFoundException)) throw;
+                        text.Text = "无法打开，请重试";
+                    }
+                };
+                Grid.SetRow(FeedbackButton, 2); Body.Children.Add(FeedbackButton);
+            }
         }
-        public static void Info(Window owner, string title, string message) { new DailyDialog(owner, title, message, "知道了", null).ShowDialog(); }
-        public static bool Confirm(Window owner, string title, string message, string accept, string cancel)
-        { return new DailyDialog(owner, title, message, accept, cancel).ShowDialog() == true; }
+        public static void Info(Window owner, string title, string message, bool feedback = false) { new DailyDialog(owner, title, message, "知道了", null, feedback).ShowDialog(); }
+        public static bool Confirm(Window owner, string title, string message, string accept, string cancel, bool feedback = false)
+        { return new DailyDialog(owner, title, message, accept, cancel, feedback).ShowDialog() == true; }
     }
 }

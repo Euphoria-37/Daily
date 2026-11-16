@@ -58,15 +58,15 @@ namespace DailyTodo
             try { new HistoryWindow(this, store, delegate { RenderTasks(); Save(); }).ShowDialog(); }
             finally { modalDepth--; }
         }
-        void Inform(string title, string message)
+        void Inform(string title, string message, bool feedback = false)
         {
             modalDepth++;
-            try { DailyDialog.Info(this, title, message); } finally { modalDepth--; }
+            try { DailyDialog.Info(this, title, message, feedback); } finally { modalDepth--; }
         }
-        bool Confirm(string title, string message, string accept, string cancel)
+        bool Confirm(string title, string message, string accept, string cancel, bool feedback = false)
         {
             modalDepth++;
-            try { return DailyDialog.Confirm(this, title, message, accept, cancel); } finally { modalDepth--; }
+            try { return DailyDialog.Confirm(this, title, message, accept, cancel, feedback); } finally { modalDepth--; }
         }
     }
 }
